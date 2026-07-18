@@ -1,0 +1,28 @@
+name: Feature proposal
+description: Propose an outcome after checking prior art
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    attributes:
+      label: User outcome
+      description: What should a user be able to accomplish?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Existing tools researched
+      description: Link to tldr, tealdeer, navi, cheat, pet, massCode, or another relevant project.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Proposed scope
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Compatibility impact
+      description: Explain file-format, CLI, GUI, and cross-platform effects.
+    validations:
+      required: true

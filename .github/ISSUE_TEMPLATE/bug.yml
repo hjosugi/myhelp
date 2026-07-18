@@ -1,0 +1,36 @@
+name: Bug report
+description: Report a reproducible MyHelp problem
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    attributes:
+      label: What happened?
+      description: Include the expected and actual behavior.
+    validations:
+      required: true
+  - type: dropdown
+    attributes:
+      label: Interface
+      options:
+        - Core/storage
+        - CLI
+        - Desktop GUI
+        - Import/export
+        - Build/package
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Operating system and version
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Logs or screenshots
+      description: Remove private page content and secrets before posting.

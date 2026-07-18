@@ -1,0 +1,17 @@
+[package]
+name = "myhelp-cli"
+description = "CLI for personal, local-first help pages"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "myhelp"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+myhelp-core = { path = "../myhelp-core" }

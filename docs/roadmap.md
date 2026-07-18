@@ -1,0 +1,40 @@
+# Roadmap
+
+## Milestone 0: public scaffold
+
+- Shared Rust core.
+- Basic Rust CLI.
+- Tauri 2 and React editor shell.
+- Local Markdown vault.
+- Prior-art research and architecture guardrails.
+- Cross-platform core/CLI CI.
+
+## Milestone 1: reliable local MVP
+
+- Atomic writes and conflict detection.
+- CLI terminal rendering and completions.
+- Desktop create/edit/search/save with robust error handling.
+- File watching for external edits.
+- Accessibility and keyboard navigation.
+
+## Milestone 2: interoperability
+
+- tealdeer vault selection and import/export.
+- tldr validation and format diagnostics.
+- navi and cheat import prototypes.
+- Source and license metadata policy.
+
+## Milestone 3: distribution
+
+- Signed or checksummed binaries for Linux, macOS, and Windows.
+- Homebrew, Scoop/WinGet, cargo-binstall, and Linux packaging evaluation.
+- Desktop packages and automatic update policy.
+
+## Milestone 4: optional collaboration
+
+- Git-backed vault workflow.
+- Sync conflict UI.
+- Shareable help packs without a centralized proprietary service.
+
+Features move between milestones only after the associated GitHub issue records
+the reason and compatibility impact.

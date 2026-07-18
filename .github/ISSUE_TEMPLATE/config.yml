@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Prior-art research
+    url: https://github.com/hjosugi/myhelp/blob/main/docs/research.md
+    about: Check existing tools before proposing overlapping functionality.

@@ -5,7 +5,8 @@ use std::path::Path;
 use std::sync::{Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::plugin::{Builder as PluginBuilder, TauriPlugin};
+use tauri::{AppHandle, Emitter, Manager, Runtime, Url};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -24,6 +25,8 @@ impl CommandError {
             CoreError::AlreadyExists(_) => ("alreadyExists", None),
             CoreError::InvalidTopic(_) => ("invalidTopic", None),
             CoreError::UnsafeSymlink(_) | CoreError::UnsafeFileType(_) => ("unsafePath", None),
+            CoreError::PageTooLarge { .. } => ("pageTooLarge", None),
+            CoreError::InputTooLarge { .. } => ("inputTooLarge", None),
             CoreError::MissingDataDirectory | CoreError::Io(_) | CoreError::WalkDir(_) => {
                 ("storage", None)
             }
@@ -138,6 +141,25 @@ fn vault() -> myhelp_core::Result<Vault> {
     Vault::discover()
 }
 
+fn navigation_guard<R: Runtime>() -> TauriPlugin<R> {
+    PluginBuilder::<R, ()>::new("myhelp-navigation-guard")
+        .on_navigation(|_, url| navigation_allowed(url, cfg!(debug_assertions)))
+        .build()
+}
+
+fn navigation_allowed(url: &Url, allow_dev_server: bool) -> bool {
+    let bundled_asset = url.scheme() == "tauri"
+        || (matches!(url.scheme(), "http" | "https")
+            && url.host_str() == Some("tauri.localhost")
+            && url.port().is_none());
+    let dev_asset = allow_dev_server
+        && url.scheme() == "http"
+        && url.host_str() == Some("localhost")
+        && url.port() == Some(1420);
+
+    bundled_asset || dev_asset
+}
+
 fn start_vault_watcher(app: &AppHandle) -> Result<VaultWatcher, Box<dyn std::error::Error>> {
     let vault = Vault::discover()?;
     vault.ensure()?;
@@ -203,6 +225,7 @@ fn start_vault_watcher(app: &AppHandle) -> Result<VaultWatcher, Box<dyn std::err
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(navigation_guard())
         .setup(|app| {
             let watcher = start_vault_watcher(app.handle())?;
             app.manage(watcher);
@@ -220,4 +243,113 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn production_navigation_allows_only_bundled_assets() {
+        for url in [
+            "tauri://localhost/index.html",
+            "http://tauri.localhost/index.html",
+            "https://tauri.localhost/index.html",
+        ] {
+            assert!(navigation_allowed(&url.parse().expect("valid URL"), false));
+        }
+
+        for url in [
+            "https://example.com/",
+            "http://localhost:1420/",
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "data:text/html,unsafe",
+            "about:blank",
+            "http://tauri.localhost:8080/",
+        ] {
+            assert!(
+                !navigation_allowed(&url.parse().expect("valid URL"), false),
+                "production navigation should reject {url}"
+            );
+        }
+    }
+
+    #[test]
+    fn development_navigation_allows_only_the_configured_vite_origin() {
+        assert!(navigation_allowed(
+            &"http://localhost:1420/".parse().expect("valid URL"),
+            true
+        ));
+
+        for url in [
+            "http://127.0.0.1:1420/",
+            "http://localhost:1421/",
+            "https://localhost:1420/",
+            "https://example.com/",
+        ] {
+            assert!(
+                !navigation_allowed(&url.parse().expect("valid URL"), true),
+                "development navigation should reject {url}"
+            );
+        }
+    }
+
+    #[test]
+    fn security_configuration_keeps_development_exceptions_out_of_production() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).expect("valid Tauri config");
+        let security = &config["app"]["security"];
+        let production = security["csp"].to_string();
+        let development = security["devCsp"].to_string();
+
+        assert_eq!(security["capabilities"], serde_json::json!(["main-editor"]));
+        assert_eq!(security["freezePrototype"], true);
+        for forbidden in [
+            "localhost:1420",
+            "ws:",
+            "unsafe-eval",
+            "unsafe-inline",
+            "https://",
+        ] {
+            assert!(
+                !production.contains(forbidden),
+                "production CSP must not contain {forbidden}"
+            );
+        }
+        assert!(development.contains("ws://localhost:1420"));
+        assert!(development.contains("unsafe-eval"));
+        assert!(development.contains("unsafe-inline"));
+    }
+
+    #[test]
+    fn main_capability_grants_only_events_and_typed_myhelp_commands() {
+        let capability: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/default.json"))
+                .expect("valid capability");
+        let permissions = capability["permissions"]
+            .as_array()
+            .expect("permission array")
+            .iter()
+            .map(|permission| permission.as_str().expect("permission string"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(capability["identifier"], "main-editor");
+        assert_eq!(capability["windows"], serde_json::json!(["main"]));
+        assert_eq!(
+            permissions,
+            [
+                "core:event:allow-listen",
+                "core:event:allow-unlisten",
+                "allow-list-pages",
+                "allow-read-page",
+                "allow-save-page",
+                "allow-preserve-draft",
+                "allow-restore-page",
+                "allow-create-page",
+                "allow-search-pages",
+                "allow-get-vault-path",
+            ]
+        );
+    }
 }

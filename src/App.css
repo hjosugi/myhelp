@@ -352,6 +352,17 @@ textarea {
   line-height: 1.65;
 }
 
+.preview-link,
+.preview-image {
+  color: #526158;
+  overflow-wrap: anywhere;
+}
+
+.preview-url {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.85em;
+}
+
 .preview article h1,
 .preview article h2 {
   font-family: Georgia, "Times New Roman", serif;

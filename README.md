@@ -72,6 +72,7 @@ pnpm install
 
 cargo test -p myhelp-core -p myhelp-cli
 cargo run -p myhelp-cli -- list
+pnpm test
 pnpm build
 pnpm tauri dev
 ```
@@ -118,7 +119,13 @@ automatically reloads clean pages and presents reconciliation choices when a
 page with unsaved edits changes or is deleted externally.
 
 MyHelp does not follow symlinks or Windows reparse points while accessing a
-vault. See the [cross-platform storage contract](docs/architecture.md#data-integrity-and-external-edits).
+vault. Pages are bounded to 1 MiB before MyHelp allocates or writes them. See
+the [cross-platform storage contract](docs/architecture.md#data-integrity-and-external-edits).
+
+The desktop app uses an explicit production CSP, inert Markdown links and
+images, a native navigation guard, and a main-window-only Tauri capability.
+See the [desktop threat model](docs/security.md) and
+[security reporting policy](SECURITY.md).
 
 ## Language workflow starter pack
 

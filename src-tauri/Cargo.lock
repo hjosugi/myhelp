@@ -1819,7 +1819,7 @@ dependencies = [
 
 [[package]]
 name = "myhelp-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "atomic-write-file",
  "directories",
@@ -1832,7 +1832,7 @@ dependencies = [
 
 [[package]]
 name = "myhelp-desktop"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "myhelp-core",
  "notify",

@@ -22,8 +22,11 @@ For native macOS or Windows setup, follow the
 
 ```bash
 cargo fmt --all --check
-cargo test -p myhelp-core -p myhelp-cli
-cargo clippy -p myhelp-core -p myhelp-cli --all-targets -- -D warnings
+cargo fmt --manifest-path src-tauri/Cargo.toml --all --check
+cargo test --workspace --locked
+cargo test --manifest-path src-tauri/Cargo.toml --all-targets --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
 pnpm build
 ```
 

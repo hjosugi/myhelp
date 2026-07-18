@@ -2,11 +2,15 @@
   description = "MyHelp CLI and Tauri desktop development environment";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  # nixpkgs unstable dropped Intel macOS in 26.11. Keep the declared CLI
+  # package available from the final stable branch that supports it.
+  inputs.nixpkgsDarwin.url = "github:NixOS/nixpkgs/nixpkgs-26.05-darwin";
 
   outputs =
     {
       self,
       nixpkgs,
+      nixpkgsDarwin,
       ...
     }:
     let
@@ -17,15 +21,21 @@
         "aarch64-darwin"
       ];
       forAllCliSystems = nixpkgs.lib.genAttrs cliSystems;
+      pkgsFor =
+        system:
+        if system == "x86_64-darwin" then
+          nixpkgsDarwin.legacyPackages.${system}
+        else
+          nixpkgs.legacyPackages.${system};
 
       linuxSystem = "x86_64-linux";
-      linuxPkgs = nixpkgs.legacyPackages.${linuxSystem};
+      linuxPkgs = pkgsFor linuxSystem;
     in
     {
       packages = forAllCliSystems (
         system:
         let
-          pkgs = nixpkgs.legacyPackages.${system};
+          pkgs = pkgsFor system;
         in
         {
           myhelp-cli = pkgs.rustPlatform.buildRustPackage {

@@ -40,9 +40,21 @@ Portable checks:
 
 ```bash
 cargo fmt --all --check
-cargo test -p myhelp-core -p myhelp-cli
-cargo clippy -p myhelp-core -p myhelp-cli --all-targets -- -D warnings
+cargo fmt --manifest-path src-tauri/Cargo.toml --all --check
+cargo test --workspace --locked
+cargo test --manifest-path src-tauri/Cargo.toml --all-targets --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
 pnpm build
+```
+
+The repository intentionally has two Cargo workspaces and lockfiles. The root
+workspace contains `myhelp-core` and `myhelp-cli`; `src-tauri` is the desktop
+workspace. Update both dependency sets explicitly:
+
+```bash
+cargo update --workspace
+cargo update --manifest-path src-tauri/Cargo.toml --workspace
 ```
 
 Run the app:

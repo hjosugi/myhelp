@@ -67,6 +67,16 @@ Without direnv, run `nix develop` first. Native setup for macOS and Windows is
 documented by the
 [official Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/).
 
+The CLI is also exposed as a Nix app on Linux and macOS:
+
+```bash
+nix run github:hjosugi/myhelp -- list
+nix build github:hjosugi/myhelp#myhelp-cli
+```
+
+This packages only the portable CLI. Desktop packaging remains native
+platform work tracked in GitHub issues.
+
 ## CLI preview
 
 ```bash

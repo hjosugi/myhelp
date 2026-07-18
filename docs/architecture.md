@@ -30,6 +30,11 @@ only through typed Tauri commands.
 The current write implementation is intentionally simple. Atomic writes,
 backups, conflict detection, and file watching are tracked as follow-up work.
 
+The accepted [page metadata ADR](adr/0001-page-metadata-sidecars.md) assigns
+optional sidecar path rules, parsing, validation, and diagnostics to core. That
+contract is not implemented yet; CLI and Tauri adapters must not grow their own
+metadata parser while implementation is pending.
+
 ### `myhelp-cli`
 
 - Uses `clap` for portable argument parsing.
@@ -68,6 +73,11 @@ selects the per-user application data directory for Linux, macOS, or Windows.
 
 The vault is portable. A user may place it in Git, Syncthing, Dropbox, or
 another sync folder without MyHelp knowing about that provider.
+
+Metadata, when present, is an adjacent readable YAML sidecar. Markdown-only
+vaults remain valid, and metadata failures do not hide readable pages. Core
+will expose a typed metadata state so the CLI and Tauri adapter can report the
+same missing, invalid, conflict, or unsupported-version result.
 
 ## Security model
 

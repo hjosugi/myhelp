@@ -104,8 +104,8 @@ shell quoting, untrusted imports, environment access, and auditability.
 
 Every create or save follows this order:
 
-1. validate the portable topic and reject every detected symlink or Windows
-   reparse point from the filesystem root through the target;
+1. validate the portable topic and reject a symlinked vault root plus every
+   detected symlink or Windows reparse point below it through the target;
 2. for saves, compare the current modification time and SHA-256 content hash
    with the revision returned by the last read;
 3. write the complete UTF-8 content to a randomly named temporary file in the

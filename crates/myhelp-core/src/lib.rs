@@ -90,11 +90,20 @@ impl Vault {
     }
 
     pub fn ensure(&self) -> Result<()> {
-        reject_symlink_components(&self.root)?;
+        match fs::symlink_metadata(&self.root) {
+            Ok(metadata) if is_symlink_or_reparse(&metadata) => {
+                return Err(Error::UnsafeSymlink(self.root.clone()));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
         fs::create_dir_all(&self.root)?;
-        reject_symlink_components(&self.root)?;
 
         let metadata = fs::symlink_metadata(&self.root)?;
+        if is_symlink_or_reparse(&metadata) {
+            return Err(Error::UnsafeSymlink(self.root.clone()));
+        }
         if !metadata.is_dir() {
             return Err(Error::Io(std::io::Error::new(
                 ErrorKind::NotADirectory,
@@ -122,6 +131,7 @@ impl Vault {
             let Some(topic) = relative_text.strip_suffix(PAGE_SUFFIX) else {
                 continue;
             };
+            self.reject_path_components(entry.path())?;
             let (content, _) = read_snapshot(entry.path())?;
             pages.push(PageSummary {
                 topic: topic.to_owned(),
@@ -137,7 +147,7 @@ impl Vault {
     pub fn read(&self, topic: &str) -> Result<Page> {
         let path = self.page_path(topic)?;
         self.ensure()?;
-        reject_symlink_components(&path)?;
+        self.reject_path_components(&path)?;
 
         let (content, revision) = match read_snapshot(&path) {
             Ok(snapshot) => snapshot,
@@ -178,7 +188,7 @@ impl Vault {
         }
 
         let staged = stage_atomic_write(&path, content)?;
-        reject_symlink_components(&path)?;
+        self.reject_path_components(&path)?;
         match fs::symlink_metadata(&path) {
             Ok(metadata) if is_symlink_or_reparse(&metadata) => {
                 return Err(Error::UnsafeSymlink(path));
@@ -200,7 +210,7 @@ impl Vault {
     ) -> Result<Page> {
         let path = self.page_path(topic)?;
         self.ensure()?;
-        reject_symlink_components(&path)?;
+        self.reject_path_components(&path)?;
 
         let actual = self.current_revision(topic)?;
         if actual.as_ref() != Some(expected_revision) {
@@ -211,7 +221,7 @@ impl Vault {
 
         // Recheck after the complete replacement has been staged. This narrows the
         // compare-and-swap window without ever exposing partially written content.
-        reject_symlink_components(&path)?;
+        self.reject_path_components(&path)?;
         let actual = self.current_revision(topic)?;
         if actual.as_ref() != Some(expected_revision) {
             return Err(conflict(topic, expected_revision, actual));
@@ -246,7 +256,7 @@ impl Vault {
                 format!("-{attempt}")
             };
             let path = parent.join(format!("{stem}{CONFLICT_MARKER}{digest}{suffix}.md"));
-            reject_symlink_components(&path)?;
+            self.reject_path_components(&path)?;
 
             match read_snapshot(&path) {
                 Ok((existing, _)) if existing == content => return Ok(path),
@@ -256,7 +266,7 @@ impl Vault {
             }
 
             let staged = stage_atomic_write(&path, content)?;
-            reject_symlink_components(&path)?;
+            self.reject_path_components(&path)?;
             match fs::symlink_metadata(&path) {
                 Ok(metadata) if is_symlink_or_reparse(&metadata) => {
                     return Err(Error::UnsafeSymlink(path));
@@ -356,6 +366,37 @@ impl Vault {
         Ok(())
     }
 
+    fn reject_path_components(&self, path: &Path) -> Result<()> {
+        let relative = path.strip_prefix(&self.root).map_err(|_| {
+            Error::Io(std::io::Error::new(
+                ErrorKind::InvalidInput,
+                format!("path is outside the vault: {}", path.display()),
+            ))
+        })?;
+        let root_metadata = fs::symlink_metadata(&self.root)?;
+        if is_symlink_or_reparse(&root_metadata) {
+            return Err(Error::UnsafeSymlink(self.root.clone()));
+        }
+
+        let mut current = self.root.clone();
+        for component in relative.components() {
+            let Component::Normal(name) = component else {
+                return Err(Error::InvalidTopic(relative.display().to_string()));
+            };
+            current.push(name);
+            match fs::symlink_metadata(&current) {
+                Ok(metadata) if is_symlink_or_reparse(&metadata) => {
+                    return Err(Error::UnsafeSymlink(current));
+                }
+                Ok(_) => {}
+                Err(error) if error.kind() == ErrorKind::NotFound => break,
+                Err(error) => return Err(error.into()),
+            }
+        }
+
+        Ok(())
+    }
+
     fn page_path(&self, topic: &str) -> Result<PathBuf> {
         validate_topic(topic)?;
         let relative = format!("{topic}{PAGE_SUFFIX}");
@@ -380,7 +421,6 @@ fn stage_atomic_write(path: &Path, content: &str) -> Result<AtomicWriteFile> {
 }
 
 fn read_snapshot(path: &Path) -> Result<(String, PageRevision)> {
-    reject_symlink_components(path)?;
     let mut file = open_read_nofollow(path)?;
     let metadata = file.metadata()?;
     if is_symlink_or_reparse(&metadata) {
@@ -442,29 +482,6 @@ fn open_read_nofollow(path: &Path) -> std::io::Result<File> {
 #[cfg(not(any(unix, windows)))]
 fn open_read_nofollow(path: &Path) -> std::io::Result<File> {
     OpenOptions::new().read(true).open(path)
-}
-
-fn reject_symlink_components(path: &Path) -> Result<()> {
-    let absolute = std::path::absolute(path)?;
-    let mut current = PathBuf::new();
-
-    for component in absolute.components() {
-        current.push(component.as_os_str());
-        if matches!(component, Component::Prefix(_) | Component::RootDir) {
-            continue;
-        }
-
-        match fs::symlink_metadata(&current) {
-            Ok(metadata) if is_symlink_or_reparse(&metadata) => {
-                return Err(Error::UnsafeSymlink(current));
-            }
-            Ok(_) => {}
-            Err(error) if error.kind() == ErrorKind::NotFound => break,
-            Err(error) => return Err(error.into()),
-        }
-    }
-
-    Ok(())
 }
 
 #[cfg(windows)]
@@ -700,6 +717,44 @@ mod tests {
             Err(Error::UnsafeSymlink(_))
         ));
         assert!(!outside.join("escape.page.md").exists());
+    }
+
+    #[test]
+    fn allows_a_platform_symlink_above_the_vault_boundary() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let physical_parent = directory.path().join("physical-parent");
+        fs::create_dir(&physical_parent).expect("physical parent");
+        let linked_parent = directory.path().join("linked-parent");
+        if let Err(error) = symlink_dir(&physical_parent, &linked_parent) {
+            if cfg!(windows) && error.kind() == ErrorKind::PermissionDenied {
+                return;
+            }
+            panic!("create directory symlink: {error}");
+        }
+        let vault = Vault::new(linked_parent.join("vault"));
+
+        let page = vault
+            .create_with_content("safe", "# Safe\n")
+            .expect("create below the trusted vault boundary");
+        assert_eq!(page.content, "# Safe\n");
+        assert!(physical_parent.join("vault/safe.page.md").is_file());
+    }
+
+    #[test]
+    fn rejects_a_symlink_as_the_vault_root() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let physical_vault = directory.path().join("physical-vault");
+        fs::create_dir(&physical_vault).expect("physical vault");
+        let linked_vault = directory.path().join("linked-vault");
+        if let Err(error) = symlink_dir(&physical_vault, &linked_vault) {
+            if cfg!(windows) && error.kind() == ErrorKind::PermissionDenied {
+                return;
+            }
+            panic!("create directory symlink: {error}");
+        }
+        let vault = Vault::new(&linked_vault);
+
+        assert!(matches!(vault.ensure(), Err(Error::UnsafeSymlink(_))));
     }
 
     #[test]

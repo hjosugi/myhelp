@@ -2,8 +2,8 @@
 members = [
   "crates/myhelp-cli",
   "crates/myhelp-core",
-  "src-tauri",
 ]
+exclude = ["src-tauri"]
 resolver = "2"
 
 [workspace.package]

@@ -44,6 +44,23 @@ backups, conflict detection, and file watching are tracked as follow-up work.
 - The initial UI provides page search, creation, editing, saving, and Markdown
   preview.
 
+### Cargo workspace boundary
+
+The root Cargo workspace contains `myhelp-core` and `myhelp-cli`, with
+`Cargo.lock` recording only their portable dependency graph. `src-tauri` is a
+separate Cargo workspace with `src-tauri/Cargo.lock` for desktop-only
+dependencies. This keeps CLI packaging from fetching Tauri, Wry, WebKitGTK, or
+platform webview crates.
+
+Both interfaces still compile the same `crates/myhelp-core` source through a
+path dependency. The split is a build and dependency-lock boundary, not a fork
+of storage behavior. Dependency updates must refresh both lockfiles explicitly:
+
+```bash
+cargo update --workspace
+cargo update --manifest-path src-tauri/Cargo.toml --workspace
+```
+
 ### Storage
 
 `MYHELP_PAGES_DIR` has highest priority. Otherwise the `directories` Rust crate

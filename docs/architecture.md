@@ -23,12 +23,10 @@ only through typed Tauri commands.
 - Resolves the platform data directory.
 - Honors `MYHELP_PAGES_DIR`.
 - Validates topics and blocks path traversal.
-- Scans without following symlinks.
+- Rejects symlinks and Windows reparse points in scan, read, and write paths.
 - Reads and writes UTF-8 Markdown.
+- Atomically replaces pages only when their last-read revision still matches.
 - Lists and searches pages.
-
-The current write implementation is intentionally simple. Atomic writes,
-backups, conflict detection, and file watching are tracked as follow-up work.
 
 The accepted [page metadata ADR](adr/0001-page-metadata-sidecars.md) assigns
 optional sidecar path rules, parsing, validation, and diagnostics to core. That
@@ -39,15 +37,22 @@ metadata parser while implementation is pending.
 
 - Uses `clap` for portable argument parsing.
 - Prints raw Markdown in the scaffold; terminal rendering is a separate issue.
-- Opens `$VISUAL` or `$EDITOR` for editing.
+- Opens a temporary working copy in `$VISUAL` or `$EDITOR`, then asks core to
+  save against the last-read revision.
+- Preserves a readable conflict copy when a disk edit wins the revision check.
 - Does not execute page commands.
 
 ### `myhelp-desktop`
 
 - Tauri 2 hosts a React/TypeScript UI in the operating system webview.
 - Rust commands are thin adapters over `myhelp-core`.
-- The initial UI provides page search, creation, editing, saving, and Markdown
-  preview.
+- The UI provides page search, creation, editing, saving, and Markdown preview.
+- A recursive native watcher emits small Tauri events. The React editor
+  debounces them, reloads clean pages, and enters a recoverable conflict state
+  for dirty or externally deleted pages.
+- If the native watcher cannot start, the adapter falls back to a two-second,
+  content-aware polling watcher. Window focus and visibility changes also
+  trigger revision checks.
 
 ### Cargo workspace boundary
 
@@ -74,6 +79,11 @@ selects the per-user application data directory for Linux, macOS, or Windows.
 The vault is portable. A user may place it in Git, Syncthing, Dropbox, or
 another sync folder without MyHelp knowing about that provider.
 
+Conflict copies are adjacent plain Markdown files named
+`<topic>.page.conflict-<content-sha256>.md`. They deliberately do not end in
+`.page.md`, so normal listing and tldr/tealdeer consumers ignore them. Repeating
+the same conflicted draft reuses the same copy.
+
 Metadata, when present, is an adjacent readable YAML sidecar. Markdown-only
 vaults remain valid, and metadata failures do not hide readable pages. Core
 will expose a typed metadata state so the CLI and Tauri adapter can report the
@@ -90,9 +100,53 @@ same missing, invalid, conflict, or unsupported-version result.
 Any command-execution feature requires a separate design covering confirmation,
 shell quoting, untrusted imports, environment access, and auditability.
 
+## Data integrity and external edits
+
+Every create or save follows this order:
+
+1. validate the portable topic and reject every detected symlink or Windows
+   reparse point from the filesystem root through the target;
+2. for saves, compare the current modification time and SHA-256 content hash
+   with the revision returned by the last read;
+3. write the complete UTF-8 content to a randomly named temporary file in the
+   destination directory, flush it, and sync it to the filesystem;
+4. recheck the target revision after staging, then atomically replace the
+   destination;
+5. read the committed page again and return its new revision.
+
+If either revision check fails, core returns a typed conflict and does not
+commit the temporary file. There is an unavoidable final compare/replace window
+on ordinary filesystems because they do not expose a portable conditional
+rename primitive; staging the full content and rechecking immediately before
+the rename minimizes that window. A committed path always exposes either the
+old complete file or the new complete file, never an in-place partial write.
+
+<!-- markdownlint-disable MD013 MD060 -->
+
+| Platform | Replacement and watcher behavior |
+|---|---|
+| Linux | Same-directory temporary file, `fsync`, and `renameat`; native inotify watcher with polling fallback. |
+| macOS | Same-directory temporary file, `fsync`, and rename; native FSEvents watcher with polling fallback. |
+| Windows | Same-directory temporary file is flushed and replaced through Rust's Windows rename path (`MoveFileExW` or `SetFileInformationByHandle`). Windows 10 1607+ filesystems supporting `FileRenameInfoEx` have Unix-like file replacement behavior. If permissions, an open handle, antivirus, or the filesystem rejects replacement, save returns an error and the old page remains. Native `ReadDirectoryChangesW` watching falls back to polling when unavailable. |
+
+<!-- markdownlint-enable MD013 MD060 -->
+
+Native watcher events are hints rather than save authorization: every reaction
+re-reads and compares the core revision. This handles editors that truncate in
+place as well as editors and sync tools that replace files.
+
+Rolling backups are not part of the MVP. Automatic generations would introduce
+retention, privacy, and sync-noise policy without solving concurrent edits.
+Atomic replacement protects against partial writes; deterministic readable
+conflict copies protect user drafts when revisions diverge.
+
 ## Cross-platform contract
 
-Core and CLI tests run on Linux, macOS, and Windows. Desktop packaging will use
-native runners because Tauri applications are built on the target platform.
-Platform-specific behavior must stay behind core path resolution or narrow
-adapter modules.
+Core, CLI, atomic replacement, revision conflict, and path-attack tests run on
+Linux, macOS, and Windows. Desktop Rust compilation and tests also use native
+runners so every watcher backend remains build-checked. Platform-specific
+behavior stays behind core path resolution or narrow adapter modules.
+
+The atomic staging implementation is provided by
+[`atomic-write-file`](https://docs.rs/atomic-write-file/0.3.0/atomic_write_file/);
+the desktop watcher uses [`notify`](https://docs.rs/notify/8.2.0/notify/).

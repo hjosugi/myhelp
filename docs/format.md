@@ -56,14 +56,29 @@ Topics:
 - cannot include the `.page.md` suffix;
 - may use `/` to create nested categories.
 
-Symlinks are never followed during recursive scans.
+Symlinks and Windows reparse points are rejected during scans and direct
+read/write access.
+
+## Conflict copies
+
+When a page changes on disk after it was read, MyHelp leaves that disk version
+untouched and can preserve the caller's draft beside it:
+
+```text
+git.page.md
+git.page.conflict-<content-sha256>.md
+```
+
+Conflict copies are ordinary UTF-8 Markdown. Their deterministic content hash
+avoids duplicate copies for repeated save attempts, and their names do not end
+in `.page.md`, so they are not normal pages or tealdeer custom pages. A user may
+compare, rename, or delete them with any file tool.
 
 ## Open format decisions
 
 The following still require ADRs and GitHub issues before implementation:
 
 - executable versus non-executable command examples;
-- conflict resolution for external edits.
 
 ## References
 

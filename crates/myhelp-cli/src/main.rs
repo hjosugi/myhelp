@@ -1,9 +1,12 @@
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
-use myhelp_core::{PageSummary, Vault};
+use myhelp_core::{Error as CoreError, PageSummary, Vault};
 use std::env;
+use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, ExitStatus};
+use tempfile::{Builder, NamedTempFile};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -56,13 +59,10 @@ fn main() -> Result<()> {
             let page = vault.create(&topic, title.as_deref())?;
             println!("created {}", page.path.display());
             if edit {
-                open_editor(&page.path)?;
+                edit_page(&vault, &topic)?;
             }
         }
-        Commands::Edit { topic } => {
-            let page = vault.read(&topic)?;
-            open_editor(&page.path)?;
-        }
+        Commands::Edit { topic } => edit_page(&vault, &topic)?,
         Commands::Search { query } => print_summaries(&vault.search(&query)?),
         Commands::Path => println!("{}", vault.root().display()),
     }
@@ -76,7 +76,97 @@ fn print_summaries(pages: &[PageSummary]) {
     }
 }
 
-fn open_editor(path: &std::path::Path) -> Result<()> {
+fn edit_page(vault: &Vault, topic: &str) -> Result<()> {
+    let page = vault.read(topic)?;
+    let mut temporary = Builder::new()
+        .prefix("myhelp-")
+        .suffix(".page.md")
+        .tempfile()
+        .context("could not create an editor draft")?;
+    temporary
+        .write_all(page.content.as_bytes())
+        .context("could not initialize the editor draft")?;
+    temporary
+        .flush()
+        .context("could not flush the editor draft")?;
+    temporary
+        .as_file()
+        .sync_all()
+        .context("could not sync the editor draft")?;
+
+    let status = open_editor(temporary.path())?;
+    let edited = fs::read_to_string(temporary.path()).context("could not read the editor draft")?;
+
+    if !status.success() {
+        if edited == page.content {
+            bail!("editor exited with {status}; the page was not changed");
+        }
+        let preserved = preserve_draft(vault, topic, &edited, temporary)?;
+        bail!(
+            "editor exited with {status}; the page was not changed and the draft was preserved at {}",
+            preserved.display()
+        );
+    }
+
+    if edited == page.content {
+        println!("unchanged {}", page.path.display());
+        return Ok(());
+    }
+
+    match vault.save(topic, &edited, &page.revision) {
+        Ok(saved) => {
+            println!("saved {}", saved.path.display());
+            Ok(())
+        }
+        Err(error) if matches!(error, CoreError::Conflict { .. }) => {
+            let change = match &error {
+                CoreError::Conflict {
+                    actual: Some(_), ..
+                } => "changed",
+                CoreError::Conflict { actual: None, .. } => "was deleted",
+                _ => unreachable!("guard only accepts conflicts"),
+            };
+            let preserved = preserve_draft(vault, topic, &edited, temporary)?;
+            Err(error).with_context(|| {
+                format!(
+                    "the disk page {change}; it was left untouched and your draft was preserved at {}",
+                    preserved.display()
+                )
+            })
+        }
+        Err(error) => {
+            let preserved = preserve_draft(vault, topic, &edited, temporary)?;
+            Err(error).with_context(|| {
+                format!(
+                    "the page was left untouched and your draft was preserved at {}",
+                    preserved.display()
+                )
+            })
+        }
+    }
+}
+
+fn preserve_draft(
+    vault: &Vault,
+    topic: &str,
+    content: &str,
+    temporary: NamedTempFile,
+) -> Result<PathBuf> {
+    match vault.preserve_conflict_copy(topic, content) {
+        Ok(path) => Ok(path),
+        Err(error) => {
+            let (_, path) = temporary
+                .keep()
+                .context("could not preserve the draft in the vault or temporary directory")?;
+            eprintln!(
+                "warning: could not preserve a vault conflict copy ({error}); kept the temporary draft instead"
+            );
+            Ok(path)
+        }
+    }
+}
+
+fn open_editor(path: &std::path::Path) -> Result<ExitStatus> {
     let editor = env::var_os("VISUAL")
         .or_else(|| env::var_os("EDITOR"))
         .unwrap_or_else(|| {
@@ -91,9 +181,5 @@ fn open_editor(path: &std::path::Path) -> Result<()> {
         .arg(path)
         .status()
         .with_context(|| format!("failed to start editor {:?}", editor))?;
-    if !status.success() {
-        bail!("editor exited with {status}");
-    }
-
-    Ok(())
+    Ok(status)
 }

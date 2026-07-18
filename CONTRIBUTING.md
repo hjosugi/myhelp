@@ -27,6 +27,7 @@ cargo test --workspace --locked
 cargo test --manifest-path src-tauri/Cargo.toml --all-targets --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+pnpm icons:check
 pnpm build
 ```
 

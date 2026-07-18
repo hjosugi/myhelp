@@ -1,0 +1,30 @@
+<!-- SPDX-License-Identifier: MIT -->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 1024 1024"
+  role="img"
+  aria-labelledby="title description"
+>
+  <title id="title">MyHelp app mark</title>
+  <desc id="description">
+    A cream help page with a folded corner and an evergreen M, on a rounded
+    evergreen square.
+  </desc>
+  <path
+    fill="#24563A"
+    d="M288 64h448c124 0 224 100 224 224v448c0 124-100 224-224 224H288C164 960 64 860 64 736V288C64 164 164 64 288 64Z"
+  />
+  <path
+    fill="#F7F9F5"
+    d="M286 194h344l152 152v392c0 51-41 92-92 92H286c-51 0-92-41-92-92V286c0-51 41-92 92-92Z"
+  />
+  <path fill="#CFE8D6" d="M630 194v100c0 29 23 52 52 52h100L630 194Z" />
+  <path
+    fill="none"
+    stroke="#397B53"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="92"
+    d="M332 666V410l180 170 180-170v256"
+  />
+</svg>

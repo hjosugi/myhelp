@@ -1,5 +1,14 @@
 # MyHelp
 
+<p align="center">
+  <img
+    src="assets/brand/myhelp-mark.svg"
+    width="112"
+    height="112"
+    alt="MyHelp mark: a help page with a folded corner and an M"
+  />
+</p>
+
 MyHelp is a local-first, cross-platform home for the commands and procedures you
 do not use often enough to memorize.
 
@@ -142,4 +151,6 @@ workable by a contributor or a coding agent without requiring private dotfiles.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). The original MyHelp mark and its generated application icons
+are also MIT-licensed; see the editable
+[brand source and color tokens](assets/brand/README.md).

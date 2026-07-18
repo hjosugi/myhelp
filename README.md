@@ -89,7 +89,10 @@ nix build github:hjosugi/myhelp#myhelp-cli
 ```
 
 This packages only the portable CLI. Desktop packaging remains native
-platform work tracked in GitHub issues.
+platform work. CI builds an unsigned native package on Linux, macOS, and
+Windows and retains each package for seven days as an inspection artifact.
+These smoke artifacts are not advertised distribution channels; see the
+[packaging checks](docs/packaging.md).
 
 ## CLI preview
 

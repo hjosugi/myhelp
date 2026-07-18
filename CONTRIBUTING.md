@@ -32,6 +32,10 @@ pnpm test
 pnpm build
 ```
 
+Also run the host-specific packaging smoke command documented in
+[`docs/packaging.md`](docs/packaging.md). CI builds an unsigned `deb`, `dmg`, or
+NSIS installer on its matching native runner.
+
 Include:
 
 - the problem and intended user outcome;

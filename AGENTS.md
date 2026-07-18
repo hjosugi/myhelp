@@ -50,6 +50,20 @@ pnpm test
 pnpm build
 ```
 
+Run the native packaging smoke command for the current host:
+
+```bash
+# Linux
+pnpm tauri build --bundles deb
+# macOS
+pnpm tauri build --bundles dmg
+# Windows
+pnpm tauri build --bundles nsis
+```
+
+These bundles are unsigned inspection artifacts. Publishing and signing belong
+to the release workflow, not ordinary pull-request CI.
+
 The repository intentionally has two Cargo workspaces and lockfiles. The root
 workspace contains `myhelp-core` and `myhelp-cli`; `src-tauri` is the desktop
 workspace. Update both dependency sets explicitly:

@@ -40,7 +40,7 @@
         {
           myhelp-cli = pkgs.rustPlatform.buildRustPackage {
             pname = "myhelp";
-            version = "0.1.0";
+            version = "0.1.1";
             src = pkgs.lib.cleanSource ./.;
 
             cargoLock.lockFile = ./Cargo.lock;

@@ -421,6 +421,14 @@ fn stage_atomic_write(path: &Path, content: &str) -> Result<AtomicWriteFile> {
 }
 
 fn read_snapshot(path: &Path) -> Result<(String, PageRevision)> {
+    let metadata = fs::symlink_metadata(path)?;
+    if is_symlink_or_reparse(&metadata) {
+        return Err(Error::UnsafeSymlink(path.to_path_buf()));
+    }
+    if !metadata.is_file() {
+        return Err(Error::UnsafeFileType(path.to_path_buf()));
+    }
+
     let mut file = open_read_nofollow(path)?;
     let metadata = file.metadata()?;
     if is_symlink_or_reparse(&metadata) {

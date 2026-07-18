@@ -12,6 +12,9 @@ use walkdir::WalkDir;
 
 const PAGE_SUFFIX: &str = ".page.md";
 const CONFLICT_MARKER: &str = ".page.conflict-";
+pub const MAX_PAGE_BYTES: usize = 1024 * 1024;
+pub const MAX_SEARCH_QUERY_BYTES: usize = 1024;
+pub const MAX_TOPIC_BYTES: usize = 240;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -33,6 +36,13 @@ pub enum Error {
     UnsafeSymlink(PathBuf),
     #[error("vault page is not a regular file: {}", .0.display())]
     UnsafeFileType(PathBuf),
+    #[error("page exceeds the {max_bytes}-byte limit: {}", path.display())]
+    PageTooLarge { path: PathBuf, max_bytes: usize },
+    #[error("{field} exceeds the {max_bytes}-byte limit")]
+    InputTooLarge {
+        field: &'static str,
+        max_bytes: usize,
+    },
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
@@ -176,6 +186,7 @@ impl Vault {
 
     pub fn create_with_content(&self, topic: &str, content: &str) -> Result<Page> {
         let path = self.page_path(topic)?;
+        reject_oversized_page(&path, content.len() as u64)?;
         self.ensure_parent_directories(&path)?;
 
         match fs::symlink_metadata(&path) {
@@ -209,6 +220,7 @@ impl Vault {
         expected_revision: &PageRevision,
     ) -> Result<Page> {
         let path = self.page_path(topic)?;
+        reject_oversized_page(&path, content.len() as u64)?;
         self.ensure()?;
         self.reject_path_components(&path)?;
 
@@ -237,6 +249,7 @@ impl Vault {
     /// names do not end in `.page.md`, so they do not appear as normal vault pages.
     pub fn preserve_conflict_copy(&self, topic: &str, content: &str) -> Result<PathBuf> {
         let page_path = self.page_path(topic)?;
+        reject_oversized_page(&page_path, content.len() as u64)?;
         self.ensure_parent_directories(&page_path)?;
 
         let digest = content_sha256(content.as_bytes());
@@ -286,6 +299,12 @@ impl Vault {
     }
 
     pub fn search(&self, query: &str) -> Result<Vec<PageSummary>> {
+        if query.len() > MAX_SEARCH_QUERY_BYTES {
+            return Err(Error::InputTooLarge {
+                field: "search query",
+                max_bytes: MAX_SEARCH_QUERY_BYTES,
+            });
+        }
         let query = query.to_lowercase();
         let mut matches = Vec::new();
 
@@ -413,6 +432,7 @@ fn conflict(topic: &str, expected_revision: &PageRevision, actual: Option<PageRe
 }
 
 fn stage_atomic_write(path: &Path, content: &str) -> Result<AtomicWriteFile> {
+    reject_oversized_page(path, content.len() as u64)?;
     let mut staged = AtomicWriteFile::open(path)?;
     staged.write_all(content.as_bytes())?;
     staged.flush()?;
@@ -428,6 +448,7 @@ fn read_snapshot(path: &Path) -> Result<(String, PageRevision)> {
     if !metadata.is_file() {
         return Err(Error::UnsafeFileType(path.to_path_buf()));
     }
+    reject_oversized_page(path, metadata.len())?;
 
     let mut file = open_read_nofollow(path)?;
     let metadata = file.metadata()?;
@@ -437,9 +458,13 @@ fn read_snapshot(path: &Path) -> Result<(String, PageRevision)> {
     if !metadata.is_file() {
         return Err(Error::UnsafeFileType(path.to_path_buf()));
     }
+    reject_oversized_page(path, metadata.len())?;
 
     let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes)?;
+    Read::by_ref(&mut file)
+        .take((MAX_PAGE_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)?;
+    reject_oversized_page(path, bytes.len() as u64)?;
     let metadata = file.metadata()?;
 
     let content = String::from_utf8(bytes).map_err(|error| {
@@ -465,6 +490,16 @@ fn modified_unix_nanos(metadata: &Metadata) -> Option<String> {
 fn content_sha256(content: &[u8]) -> String {
     let digest = Sha256::digest(content);
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn reject_oversized_page(path: &Path, byte_len: u64) -> Result<()> {
+    if byte_len > MAX_PAGE_BYTES as u64 {
+        return Err(Error::PageTooLarge {
+            path: path.to_path_buf(),
+            max_bytes: MAX_PAGE_BYTES,
+        });
+    }
+    Ok(())
 }
 
 #[cfg(unix)]
@@ -507,6 +542,12 @@ fn is_symlink_or_reparse(metadata: &Metadata) -> bool {
 }
 
 fn validate_topic(topic: &str) -> Result<()> {
+    if topic.len() > MAX_TOPIC_BYTES {
+        return Err(Error::InputTooLarge {
+            field: "topic",
+            max_bytes: MAX_TOPIC_BYTES,
+        });
+    }
     if topic.is_empty()
         || topic.starts_with('/')
         || topic.starts_with('\\')
@@ -776,6 +817,54 @@ mod tests {
         assert!(matches!(
             vault.read("directory"),
             Err(Error::UnsafeFileType(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_oversized_page_content_before_writing() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let vault = Vault::new(directory.path().join("vault"));
+        let oversized = "x".repeat(MAX_PAGE_BYTES + 1);
+
+        assert!(matches!(
+            vault.create_with_content("oversized", &oversized),
+            Err(Error::PageTooLarge { .. })
+        ));
+        assert!(!vault.root().join("oversized.page.md").exists());
+    }
+
+    #[test]
+    fn rejects_an_oversized_page_added_outside_myhelp() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let vault = Vault::new(directory.path().join("vault"));
+        vault.ensure().expect("vault directory");
+        fs::write(
+            vault.root().join("oversized.page.md"),
+            vec![b'x'; MAX_PAGE_BYTES + 1],
+        )
+        .expect("external oversized page");
+
+        assert!(matches!(
+            vault.read("oversized"),
+            Err(Error::PageTooLarge { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_oversized_topics_and_search_queries() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let vault = Vault::new(directory.path().join("vault"));
+
+        assert!(matches!(
+            vault.create(&"t".repeat(MAX_TOPIC_BYTES + 1), None),
+            Err(Error::InputTooLarge { field: "topic", .. })
+        ));
+        assert!(matches!(
+            vault.search(&"q".repeat(MAX_SEARCH_QUERY_BYTES + 1)),
+            Err(Error::InputTooLarge {
+                field: "search query",
+                ..
+            })
         ));
     }
 

@@ -1,8 +1,8 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import ReactMarkdown from "react-markdown";
 import "./App.css";
+import { MarkdownPreview } from "./MarkdownPreview";
 
 type PageSummary = {
   topic: string;
@@ -532,7 +532,7 @@ function App() {
                 <section className="pane preview">
                   <h3>Preview</h3>
                   <article>
-                    <ReactMarkdown>{draft}</ReactMarkdown>
+                    <MarkdownPreview source={draft} />
                   </article>
                 </section>
               </div>

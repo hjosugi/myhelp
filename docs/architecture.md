@@ -91,11 +91,17 @@ same missing, invalid, conflict, or unsupported-version result.
 
 ## Security model
 
+- The reviewed desktop threat model lives in
+  [`docs/security.md`](security.md).
 - Topics cannot be absolute or contain `..`.
 - Vault scans do not follow symlinks.
-- Markdown is rendered without raw HTML in the React scaffold.
+- Pages are limited to 1 MiB; topics and search queries also have explicit
+  bounds.
+- Markdown is rendered without raw HTML, active links, or external images.
 - Saved commands are text only and are never executed by the MVP.
-- Tauri capabilities should remain minimal.
+- Production and development use separate CSPs.
+- The main window can listen for events and invoke only the eight typed MyHelp
+  commands declared in the Tauri application manifest.
 
 Any command-execution feature requires a separate design covering confirmation,
 shell quoting, untrusted imports, environment access, and auditability.

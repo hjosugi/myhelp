@@ -1,9 +1,18 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
-  "identifier": "default",
-  "description": "Capability for the main window",
+  "identifier": "main-editor",
+  "description": "Allow the local main editor to receive vault events and invoke only MyHelp's typed commands.",
   "windows": ["main"],
   "permissions": [
-    "core:default"
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-list-pages",
+    "allow-read-page",
+    "allow-save-page",
+    "allow-preserve-draft",
+    "allow-restore-page",
+    "allow-create-page",
+    "allow-search-pages",
+    "allow-get-vault-path"
   ]
 }

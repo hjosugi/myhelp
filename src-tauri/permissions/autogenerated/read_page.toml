@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-read-page"
+description = "Enables the read_page command without any pre-configured scope."
+commands.allow = ["read_page"]
+
+[[permission]]
+identifier = "deny-read-page"
+description = "Denies the read_page command without any pre-configured scope."
+commands.deny = ["read_page"]

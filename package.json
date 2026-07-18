@@ -1,12 +1,13 @@
 {
   "name": "myhelp",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "packageManager": "pnpm@10.34.5",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "test": "vitest run",
     "icons": "node scripts/generate-icons.mjs",
     "icons:check": "node scripts/generate-icons.mjs --check",
     "preview": "vite preview",
@@ -24,6 +25,7 @@
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^4.1.10"
   }
 }

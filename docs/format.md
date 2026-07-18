@@ -59,6 +59,12 @@ Topics:
 Symlinks and Windows reparse points are rejected during scans and direct
 read/write access.
 
+Topics are limited to 240 UTF-8 bytes and page files to 1 MiB. These bounds
+keep IPC, path handling, preview rendering, and externally added files
+predictable across supported platforms. An oversized external page remains an
+ordinary readable file to other tools, but MyHelp reports it instead of loading
+or overwriting it.
+
 ## Conflict copies
 
 When a page changes on disk after it was read, MyHelp leaves that disk version

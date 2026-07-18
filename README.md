@@ -1,5 +1,7 @@
 # MyHelp
 
+<!-- markdownlint-disable MD033 -->
+
 <p align="center">
   <img
     src="assets/brand/myhelp-mark.svg"
@@ -8,6 +10,8 @@
     alt="MyHelp mark: a help page with a folded corner and an M"
   />
 </p>
+
+<!-- markdownlint-enable MD033 -->
 
 MyHelp is a local-first, cross-platform home for the commands and procedures you
 do not use often enough to memorize.
@@ -98,6 +102,23 @@ myhelp path
 ```
 
 Set `MYHELP_PAGES_DIR` or pass `--pages-dir` to use an existing Markdown vault.
+
+## Data safety
+
+MyHelp stages every page save in the page's directory, flushes and syncs the
+complete draft, then atomically replaces the old file. Reads carry a revision
+made from the file modification time and SHA-256 content hash, so the CLI and
+desktop editor refuse to overwrite a page changed by another editor, Git, or a
+sync tool.
+
+`myhelp edit` edits a temporary working copy rather than the live page. On a
+conflict, the disk page remains untouched and MyHelp stores the draft as a
+readable adjacent `*.page.conflict-<sha256>.md` file. The desktop app
+automatically reloads clean pages and presents reconciliation choices when a
+page with unsaved edits changes or is deleted externally.
+
+MyHelp does not follow symlinks or Windows reparse points while accessing a
+vault. See the [cross-platform storage contract](docs/architecture.md#data-integrity-and-external-edits).
 
 ## Language workflow starter pack
 

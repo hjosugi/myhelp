@@ -29,10 +29,23 @@ The initial content conventions follow tldr pages:
 - Nested topics such as `python/new-project.page.md` are a MyHelp organization
   extension. Export to tealdeer must define a collision-safe flat name such as
   `python-new-project.page.md`.
-- MyHelp may retain metadata in an index or sidecar later, but it must not make
-  the Markdown unreadable without MyHelp.
+- MyHelp metadata is optional and lives beside the Markdown as
+  `<topic>.page.meta.yaml`. The accepted
+  [metadata ADR](adr/0001-page-metadata-sidecars.md) keeps the page body
+  unchanged.
 - Importers for navi, cheat, or pet belong in adapter crates or modules and must
   retain the original source where licensing requires it.
+
+## Optional metadata
+
+`git.page.md` can be accompanied by `git.page.meta.yaml`. The sidecar may hold a
+stable ID, tags, aliases, locale, license, and provenance. A missing, invalid,
+or newer sidecar never makes readable Markdown disappear.
+
+MyHelp-managed moves carry both files and preserve the ID. Direct
+tldr/tealdeer use continues to consume only `.page.md`. Foreign-format exports
+must report fields they cannot represent and cannot silently discard
+attribution or license data.
 
 ## Topic safety
 
@@ -47,13 +60,9 @@ Symlinks are never followed during recursive scans.
 
 ## Open format decisions
 
-The following require ADRs and GitHub issues before implementation:
+The following still require ADRs and GitHub issues before implementation:
 
-- tags and aliases;
-- stable identifiers across renames;
-- source URLs and attribution metadata;
-- locale variants;
-- executable vs non-executable command examples;
+- executable versus non-executable command examples;
 - conflict resolution for external edits.
 
 ## References
@@ -61,3 +70,4 @@ The following require ADRs and GitHub issues before implementation:
 - [tldr style guide](https://github.com/tldr-pages/tldr/blob/main/contributing-guides/style-guide.md)
 - [tldr client specification](https://github.com/tldr-pages/tldr/blob/main/CLIENT-SPECIFICATION.md)
 - [tealdeer custom pages and patches](https://tealdeer-rs.github.io/tealdeer/usage_custom_pages.html)
+- [MyHelp metadata ADR](adr/0001-page-metadata-sidecars.md)

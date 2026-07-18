@@ -22,7 +22,8 @@
 - tealdeer vault selection and import/export.
 - tldr validation and format diagnostics.
 - navi and cheat import prototypes.
-- Source and license metadata policy.
+- [Source and license metadata policy](adr/0001-page-metadata-sidecars.md)
+  (accepted; implementation follows through adapter issues).
 
 ## Milestone 3: distribution
 

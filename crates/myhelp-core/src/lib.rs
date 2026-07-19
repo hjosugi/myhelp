@@ -10,7 +10,13 @@ use std::time::UNIX_EPOCH;
 use thiserror::Error;
 use walkdir::WalkDir;
 
+mod adapters;
+mod external;
 mod tldr;
+pub use adapters::{
+    AdapterCompatibility, AdapterConversionReport, AdapterDiagnostic, AdapterDiagnosticLevel,
+    AdapterDisposition, ForeignAdapter, ForeignFormat, NaviAdapter, inspect_navi_file,
+};
 pub use tldr::{
     TldrDiagnostic, TldrDiagnosticLevel, TldrExportMapping, TldrExportReport, TldrImportOptions,
     TldrImportReport, TldrSource, TldrValidation, validate_tldr_file, validate_tldr_page,

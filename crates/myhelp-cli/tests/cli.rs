@@ -242,3 +242,85 @@ fn tldr_import_and_export_preserve_content_metadata_and_mapping() {
     );
     assert!(destination.join("work-git.page.meta.yaml").is_file());
 }
+
+#[test]
+fn navi_adapter_is_a_non_writing_non_executing_dry_run() {
+    let directory = tempfile::tempdir().expect("temporary directory");
+    let source = directory.path().join("git.cheat");
+    let sentinel = directory.path().join("must-not-exist");
+    fs::write(
+        &source,
+        format!(
+            "% git, workflow\n\n# Change branch\ngit checkout <branch>\n\n$ branch: touch {}\n",
+            sentinel.display()
+        ),
+    )
+    .expect("navi fixture");
+    let missing_vault = directory.path().join("missing-vault");
+
+    let inspected = myhelp(
+        &[
+            "adapter",
+            "inspect",
+            "navi",
+            source.to_str().expect("UTF-8 path"),
+            "--json",
+        ],
+        &missing_vault,
+    );
+    assert!(
+        inspected.status.success(),
+        "{}",
+        String::from_utf8_lossy(&inspected.stderr)
+    );
+    let report: Value = serde_json::from_slice(&inspected.stdout).expect("adapter JSON");
+    assert_eq!(report["format"], "navi");
+    assert_eq!(report["dryRun"], true);
+    assert_eq!(report["convertible"], true);
+    assert_eq!(report["lossless"], false);
+    assert_eq!(report["sourceTags"], serde_json::json!(["git", "workflow"]));
+    assert_eq!(
+        report["generatedPage"],
+        "# Git\n\n> Converted from a navi cheatsheet for display only; MyHelp never executes saved commands.\n\n- Change branch:\n\n`git checkout {{branch}}`\n"
+    );
+    assert!(
+        !sentinel.exists(),
+        "adapter must never execute variable sources"
+    );
+    assert!(
+        !missing_vault.exists(),
+        "dry-run inspection must not create a vault"
+    );
+}
+
+#[test]
+fn navi_adapter_returns_a_machine_readable_failure_report() {
+    let directory = tempfile::tempdir().expect("temporary directory");
+    let source = directory.path().join("multi.cheat.md");
+    fs::write(
+        &source,
+        "% first\n\n# First\nfirst\n\n% second\n\n# Second\nsecond\n",
+    )
+    .expect("navi fixture");
+
+    let inspected = myhelp(
+        &[
+            "adapter",
+            "inspect",
+            "navi",
+            source.to_str().expect("UTF-8 path"),
+            "--json",
+        ],
+        &directory.path().join("missing-vault"),
+    );
+    assert_eq!(inspected.status.code(), Some(5));
+    let report: Value = serde_json::from_slice(&inspected.stdout).expect("adapter JSON");
+    assert_eq!(report["convertible"], false);
+    assert!(
+        report["diagnostics"]
+            .as_array()
+            .expect("diagnostics")
+            .iter()
+            .any(|diagnostic| diagnostic["code"] == "multiple-contexts")
+    );
+}

@@ -1,11 +1,12 @@
+use crate::external::{ExternalFileKind, read_external_bytes, read_external_utf8};
 use crate::{
     Error, MAX_PAGE_BYTES, Result, Vault, content_sha256, is_symlink_or_reparse, metadata_path,
-    no_replace_rename, open_read_nofollow, read_snapshot, reject_oversized_page, validate_topic,
+    no_replace_rename, read_snapshot, validate_topic,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::fs::{self, File};
-use std::io::{ErrorKind, Read, Write};
+use std::fs;
+use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
 use uuid::Uuid;
@@ -300,7 +301,7 @@ pub fn validate_tldr_page(content: &str, expected_topic: Option<&str>) -> TldrVa
 }
 
 pub fn validate_tldr_file(path: &Path, expected_topic: Option<&str>) -> Result<TldrValidation> {
-    let content = read_external_utf8(path, MAX_PAGE_BYTES, "page")?;
+    let content = read_external_utf8(path, MAX_PAGE_BYTES, ExternalFileKind::Page)?;
     let derived_topic;
     let topic = match expected_topic {
         Some(topic) => {
@@ -326,7 +327,7 @@ impl Vault {
         source: &Path,
         options: &TldrImportOptions,
     ) -> Result<TldrImportReport> {
-        let content = read_external_utf8(source, MAX_PAGE_BYTES, "page")?;
+        let content = read_external_utf8(source, MAX_PAGE_BYTES, ExternalFileKind::Page)?;
         let topic = match &options.topic {
             Some(topic) => topic.clone(),
             None => topic_from_source(source)?,
@@ -351,7 +352,7 @@ impl Vault {
             Ok(_) => Some(read_external_utf8(
                 &source_metadata,
                 MAX_METADATA_BYTES,
-                "metadata",
+                ExternalFileKind::Input("metadata file"),
             )?),
             Err(error) if error.kind() == ErrorKind::NotFound => None,
             Err(error) => return Err(error.into()),
@@ -426,8 +427,11 @@ impl Vault {
                     return Err(Error::UnsafeFileType(source_metadata));
                 }
                 Ok(_) => {
-                    let metadata =
-                        read_external_bytes(&source_metadata, MAX_METADATA_BYTES, "metadata")?;
+                    let metadata = read_external_bytes(
+                        &source_metadata,
+                        MAX_METADATA_BYTES,
+                        ExternalFileKind::Input("metadata file"),
+                    )?;
                     let filename = format!("{stem}{METADATA_SUFFIX}");
                     let target = destination.join(&filename);
                     planned.push(PlannedExport {
@@ -604,68 +608,6 @@ fn write_new_file_atomic(path: &Path, content: &[u8]) -> Result<()> {
             Error::Io(error)
         }
     })
-}
-
-fn read_external_utf8(path: &Path, max_bytes: usize, kind: &str) -> Result<String> {
-    let mut file = checked_external_file(path, max_bytes, kind)?;
-    let mut bytes = Vec::new();
-    Read::by_ref(&mut file)
-        .take((max_bytes + 1) as u64)
-        .read_to_end(&mut bytes)?;
-    reject_external_size(path, bytes.len() as u64, max_bytes, kind)?;
-    let content = String::from_utf8(bytes).map_err(|error| {
-        Error::Io(std::io::Error::new(
-            ErrorKind::InvalidData,
-            format!("{kind} is not valid UTF-8: {error}"),
-        ))
-    })?;
-    Ok(content)
-}
-
-fn read_external_bytes(path: &Path, max_bytes: usize, kind: &str) -> Result<Vec<u8>> {
-    let mut file = checked_external_file(path, max_bytes, kind)?;
-    let mut bytes = Vec::new();
-    Read::by_ref(&mut file)
-        .take((max_bytes + 1) as u64)
-        .read_to_end(&mut bytes)?;
-    reject_external_size(path, bytes.len() as u64, max_bytes, kind)?;
-    Ok(bytes)
-}
-
-fn checked_external_file(path: &Path, max_bytes: usize, kind: &str) -> Result<File> {
-    let metadata = fs::symlink_metadata(path)?;
-    if is_symlink_or_reparse(&metadata) {
-        return Err(Error::UnsafeSymlink(path.to_path_buf()));
-    }
-    if !metadata.is_file() {
-        return Err(Error::UnsafeFileType(path.to_path_buf()));
-    }
-    reject_external_size(path, metadata.len(), max_bytes, kind)?;
-    let file = open_read_nofollow(path)?;
-    let metadata = file.metadata()?;
-    if is_symlink_or_reparse(&metadata) {
-        return Err(Error::UnsafeSymlink(path.to_path_buf()));
-    }
-    if !metadata.is_file() {
-        return Err(Error::UnsafeFileType(path.to_path_buf()));
-    }
-    reject_external_size(path, metadata.len(), max_bytes, kind)?;
-    Ok(file)
-}
-
-fn reject_external_size(path: &Path, size: u64, max_bytes: usize, kind: &str) -> Result<()> {
-    if size > max_bytes as u64 {
-        if kind == "page" {
-            reject_oversized_page(path, size)
-        } else {
-            Err(Error::InputTooLarge {
-                field: "metadata file",
-                max_bytes,
-            })
-        }
-    } else {
-        Ok(())
-    }
 }
 
 fn topic_from_source(source: &Path) -> Result<String> {

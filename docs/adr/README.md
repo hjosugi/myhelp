@@ -8,6 +8,7 @@ vault format, interoperability, security, or more than one application layer.
 | ADR | Status | Decision |
 |---|---|---|
 | [0001](0001-page-metadata-sidecars.md) | Accepted | Keep optional page metadata in adjacent YAML sidecars |
+| [0002](0002-foreign-format-adapter-levels.md) | Accepted | Use explicit lossy-preview, read-only, or unsupported compatibility levels for foreign formats |
 
 <!-- markdownlint-enable MD060 -->
 

@@ -1,0 +1,11 @@
+% deploy
+@ shared
+
+# Deploy a manifest
+kubectl apply \
+  --filename <manifest>
+
+% second-context
+
+# Show pods
+kubectl get pods

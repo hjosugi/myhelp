@@ -1,0 +1,7 @@
+% git, workflow
+
+# Change branch
+git checkout <branch>
+
+$ branch: git branch --format='%(refname:short)'
+; Original MyHelp test fixture. This command source must never run in tests.

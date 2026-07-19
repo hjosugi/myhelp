@@ -12,9 +12,9 @@
                                 React desktop editor
 ```
 
-`myhelp-core` is the only layer allowed to define page paths and storage
-semantics. The CLI and desktop adapter call it directly. React accesses files
-only through typed Tauri commands.
+`myhelp-core` is the only layer allowed to define page paths, storage semantics,
+foreign-format parsing, and conversion diagnostics. The CLI and desktop adapter
+call it directly. React accesses files only through typed Tauri commands.
 
 ## Components
 
@@ -31,6 +31,9 @@ only through typed Tauri commands.
 - Lists and searches pages.
 - Validates the supported tldr subset and owns byte-preserving,
   collision-safe tldr/tealdeer import and export.
+- Keeps foreign-format parsing behind a typed adapter trait. The navi prototype
+  produces a non-writing, explicitly lossy report and never evaluates snippets,
+  dynamic variable sources, or inherited contexts.
 
 The accepted [page metadata ADR](adr/0001-page-metadata-sidecars.md) assigns
 optional sidecar path rules, parsing, validation, and diagnostics to core. The
@@ -54,6 +57,8 @@ Tauri adapters must not grow their own parser while it is pending.
 - Preserves a readable conflict copy when a disk edit wins the revision check.
 - Exposes line-oriented tldr validation plus byte-preserving import and
   deterministic flat export reports.
+- Exposes foreign adapter inspection before vault discovery, so a dry run
+  cannot create a vault as a side effect.
 - Does not execute page commands.
 
 The stable output, pager, completion, editor, and exit-code rules are specified

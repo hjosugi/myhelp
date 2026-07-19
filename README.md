@@ -108,6 +108,7 @@ myhelp list --json
 myhelp tldr validate ./git.md
 myhelp tldr import ./git.page.md --topic work/git
 myhelp tldr export ./tealdeer-pages --json
+myhelp adapter inspect navi ./git.cheat --json
 myhelp completions fish > ~/.config/fish/completions/myhelp.fish
 myhelp path
 ```
@@ -130,6 +131,12 @@ diagnostics, and exports nested topics through a deterministic,
 case-insensitive collision-safe mapping without overwriting existing files.
 Flat vaults can also be used directly as a tealdeer custom-page directory.
 See the [tldr and tealdeer interoperability contract](docs/tldr.md).
+
+The navi prototype generates a typed, explicitly lossy page preview without
+creating a vault or executing snippets and command-backed variable sources.
+cheat and pet remain documented read-only-index targets until their unstructured
+or multi-snippet metadata can be mapped honestly. See the
+[foreign-format adapter contract](docs/adapters.md).
 
 ## Data safety
 
@@ -199,7 +206,8 @@ Flat `<topic>.page.md` files can be consumed directly by tealdeer when its custo
 page directory points at the vault. Nested topics are a MyHelp organization
 extension and use an explicit export mapping. See
 [the format contract](docs/format.md) and
-[the adapter guide](docs/tldr.md).
+[the tldr adapter guide](docs/tldr.md). Foreign navi, cheat, and pet boundaries
+are documented in [the foreign-format adapter guide](docs/adapters.md).
 
 ## Official references
 

@@ -80,6 +80,26 @@ avoids duplicate copies for repeated save attempts, and their names do not end
 in `.page.md`, so they are not normal pages or tealdeer custom pages. A user may
 compare, rename, or delete them with any file tool.
 
+## Recoverable deletions
+
+Desktop deletion does not permanently unlink a page. Core moves it beside the
+original topic:
+
+```text
+git.page.deleted-<content-sha256>.md
+git.page.deleted-<content-sha256>-1.md
+```
+
+The numeric suffix is used only when that recovery filename already exists.
+These are ordinary UTF-8 Markdown files, but they do not end in `.page.md` and
+therefore do not appear as normal pages or tealdeer custom pages. Undo restores
+the exact file only while `git.page.md` is unoccupied.
+
+When an optional metadata sidecar exists, managed rename, deletion, and restore
+carry it without parsing or rewriting it. A deleted sidecar is named after the
+recovery file, for example
+`git.page.deleted-<content-sha256>.page.meta.yaml`.
+
 ## Open format decisions
 
 The following still require ADRs and GitHub issues before implementation:

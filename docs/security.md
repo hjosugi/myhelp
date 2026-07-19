@@ -74,15 +74,25 @@ It grants event `listen` and `unlisten`, plus these application commands:
 - `create_page`
 - `search_pages`
 - `get_vault_path`
+- `rename_page`
+- `delete_page`
+- `restore_deleted_page`
+- `choose_vault`
+- `close_window`
 
 The command list is declared in the Tauri application manifest, so each command
-requires its generated allow permission. No shell, process, filesystem, dialog,
-HTTP, clipboard, updater, tray, menu, path, or window-management plugin
-permission is enabled. Remote origins are not included in the capability.
+requires its generated allow permission. The dialog plugin is initialized only
+for the native `choose_vault` implementation; none of its frontend permissions
+are granted. No shell, process, filesystem, dialog, HTTP, clipboard, updater,
+tray, menu, path, or window-management plugin permission is enabled. Remote
+origins are not included in the capability.
 
 The Rust adapter passes topics and content to core rather than constructing
-paths. Structured errors do not include page content. The vault path and draft
-path are shown to the local user; they are not transmitted.
+page paths. The dedicated vault chooser returns only the directory the user
+selected, validates it as a vault, and replaces the native watcher; it does not
+grant the WebView general filesystem access. Structured errors do not include
+page content. The vault path, conflict path, and deletion recovery state are
+shown to the local user; they are not transmitted.
 
 ### Saved commands
 

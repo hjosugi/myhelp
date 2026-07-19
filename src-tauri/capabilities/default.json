@@ -13,6 +13,11 @@
     "allow-restore-page",
     "allow-create-page",
     "allow-search-pages",
-    "allow-get-vault-path"
+    "allow-get-vault-path",
+    "allow-rename-page",
+    "allow-delete-page",
+    "allow-restore-deleted-page",
+    "allow-choose-vault",
+    "allow-close-window"
   ]
 }

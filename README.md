@@ -121,6 +121,12 @@ readable adjacent `*.page.conflict-<sha256>.md` file. The desktop app
 automatically reloads clean pages and presents reconciliation choices when a
 page with unsaved edits changes or is deleted externally.
 
+The desktop editor also confirms every context-changing action while a draft is
+dirty, including navigation, creation, rename, deletion, vault switching, and
+window close. Rename never replaces another topic. Delete moves the page to a
+readable adjacent recovery file and offers Undo instead of unlinking it
+permanently.
+
 MyHelp does not follow symlinks or Windows reparse points while accessing a
 vault. Pages are bounded to 1 MiB before MyHelp allocates or writes them. See
 the [cross-platform storage contract](docs/architecture.md#data-integrity-and-external-edits).
@@ -128,7 +134,10 @@ the [cross-platform storage contract](docs/architecture.md#data-integrity-and-ex
 The desktop app uses an explicit production CSP, inert Markdown links and
 images, a native navigation guard, and a main-window-only Tauri capability.
 See the [desktop threat model](docs/security.md) and
-[security reporting policy](SECURITY.md).
+[security reporting policy](SECURITY.md). Keyboard shortcuts, focus behavior,
+screen-reader announcements, contrast checks, and the manual accessibility
+matrix are documented in the
+[desktop accessibility contract](docs/accessibility.md).
 
 ## Language workflow starter pack
 

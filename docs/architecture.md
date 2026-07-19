@@ -26,6 +26,8 @@ only through typed Tauri commands.
 - Rejects symlinks and Windows reparse points in scan, read, and write paths.
 - Reads and writes UTF-8 Markdown.
 - Atomically replaces pages only when their last-read revision still matches.
+- Renames pages without replacing an occupied topic.
+- Moves deleted pages to readable recovery Markdown and restores them on demand.
 - Lists and searches pages.
 
 The accepted [page metadata ADR](adr/0001-page-metadata-sidecars.md) assigns
@@ -46,7 +48,13 @@ metadata parser while implementation is pending.
 
 - Tauri 2 hosts a React/TypeScript UI in the operating system webview.
 - Rust commands are thin adapters over `myhelp-core`.
-- The UI provides page search, creation, editing, saving, and Markdown preview.
+- The UI provides page search, creation, editing, saving, rename, recoverable
+  deletion, Markdown preview, and a native vault chooser.
+- Dirty navigation, creation, rename, deletion, vault switching, and native
+  window close all pass through one explicit save/discard/cancel decision.
+- The vault chooser is implemented as a dedicated Rust command. The dialog
+  plugin's general frontend commands receive no capability, and the selected
+  path is validated by core before the watcher and command state switch.
 - A recursive native watcher emits small Tauri events. The React editor
   debounces them, reloads clean pages, and enters a recoverable conflict state
   for dirty or externally deleted pages.
@@ -84,6 +92,12 @@ Conflict copies are adjacent plain Markdown files named
 `.page.md`, so normal listing and tldr/tealdeer consumers ignore them. Repeating
 the same conflicted draft reuses the same copy.
 
+Recoverable deletions are adjacent plain Markdown files named
+`<topic>.page.deleted-<content-sha256>[-n].md`. They also stay out of normal
+listing. Undo moves the recovery file back only when the original topic remains
+unoccupied. A MyHelp rename, deletion, or restore carries an existing
+`<topic>.page.meta.yaml` sidecar without parsing it.
+
 Metadata, when present, is an adjacent readable YAML sidecar. Markdown-only
 vaults remain valid, and metadata failures do not hide readable pages. Core
 will expose a typed metadata state so the CLI and Tauri adapter can report the
@@ -100,8 +114,8 @@ same missing, invalid, conflict, or unsupported-version result.
 - Markdown is rendered without raw HTML, active links, or external images.
 - Saved commands are text only and are never executed by the MVP.
 - Production and development use separate CSPs.
-- The main window can listen for events and invoke only the eight typed MyHelp
-  commands declared in the Tauri application manifest.
+- The main window can listen for events and invoke only the thirteen typed
+  MyHelp commands declared in the Tauri application manifest.
 
 Any command-execution feature requires a separate design covering confirmation,
 shell quoting, untrusted imports, environment access, and auditability.
@@ -119,6 +133,15 @@ Every create or save follows this order:
 4. recheck the target revision after staging, then atomically replace the
    destination;
 5. read the committed page again and return its new revision.
+
+Rename, recoverable delete, and restore compare the last-read revision, reject
+symlink/reparse paths, and use the platform's atomic no-replace rename primitive
+(`renameat2(RENAME_NOREPLACE)`, `renamex_np(RENAME_EXCL)`, or `MoveFileW`).
+An occupied destination therefore fails without replacing it. Page and metadata
+sidecar moves cannot be a single portable transaction; if the sidecar move
+fails, core attempts to move the already-safe page back to its source name and
+reports both errors if rollback also fails. A missing or duplicated sidecar
+never hides readable Markdown, matching the metadata ADR's degradation rule.
 
 If either revision check fails, core returns a typed conflict and does not
 commit the temporary file. There is an unavoidable final compare/replace window

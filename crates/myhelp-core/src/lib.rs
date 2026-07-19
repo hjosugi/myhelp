@@ -12,6 +12,8 @@ use walkdir::WalkDir;
 
 const PAGE_SUFFIX: &str = ".page.md";
 const CONFLICT_MARKER: &str = ".page.conflict-";
+const DELETED_MARKER: &str = ".page.deleted-";
+const METADATA_SUFFIX: &str = ".page.meta.yaml";
 pub const MAX_PAGE_BYTES: usize = 1024 * 1024;
 pub const MAX_SEARCH_QUERY_BYTES: usize = 1024;
 pub const MAX_TOPIC_BYTES: usize = 240;
@@ -73,6 +75,14 @@ pub struct Page {
     pub content: String,
     pub path: PathBuf,
     pub revision: PageRevision,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DeletedPage {
+    pub topic: String,
+    pub recovery_token: String,
+    pub recovery_path: PathBuf,
 }
 
 #[derive(Debug, Clone)]
@@ -243,6 +253,90 @@ impl Vault {
         self.read(topic)
     }
 
+    /// Rename a page without replacing an existing destination.
+    ///
+    /// The page and an optional metadata sidecar use platform no-clobber rename
+    /// operations. This keeps the original readable if any move step fails.
+    pub fn rename(
+        &self,
+        topic: &str,
+        new_topic: &str,
+        expected_revision: &PageRevision,
+    ) -> Result<Page> {
+        let source = self.page_path(topic)?;
+        let destination = self.page_path(new_topic)?;
+        self.ensure()?;
+        self.reject_path_components(&source)?;
+        self.reject_path_components(&destination)?;
+
+        let actual = self.current_revision(topic)?;
+        if actual.as_ref() != Some(expected_revision) {
+            return Err(conflict(topic, expected_revision, actual));
+        }
+        if topic == new_topic {
+            return self.read(topic);
+        }
+        self.reject_occupied_destination(new_topic, &destination)?;
+
+        // Recheck immediately before the no-clobber move, which fails if
+        // another writer won the destination name.
+        let actual = self.current_revision(topic)?;
+        if actual.as_ref() != Some(expected_revision) {
+            return Err(conflict(topic, expected_revision, actual));
+        }
+        self.move_with_sidecar_no_replace(&source, &destination)?;
+        self.read(new_topic)
+    }
+
+    /// Move a page to a readable recovery file rather than permanently deleting it.
+    pub fn delete(&self, topic: &str, expected_revision: &PageRevision) -> Result<DeletedPage> {
+        let source = self.page_path(topic)?;
+        self.ensure()?;
+        self.reject_path_components(&source)?;
+
+        let actual = self.current_revision(topic)?;
+        if actual.as_ref() != Some(expected_revision) {
+            return Err(conflict(topic, expected_revision, actual));
+        }
+
+        let digest = &expected_revision.content_sha256;
+        let (recovery_token, recovery_path) = self.available_recovery_path(&source, digest)?;
+
+        let actual = self.current_revision(topic)?;
+        if actual.as_ref() != Some(expected_revision) {
+            return Err(conflict(topic, expected_revision, actual));
+        }
+        self.move_with_sidecar_no_replace(&source, &recovery_path)?;
+
+        Ok(DeletedPage {
+            topic: topic.to_owned(),
+            recovery_token,
+            recovery_path,
+        })
+    }
+
+    /// Restore a page previously moved aside by [`Vault::delete`].
+    pub fn restore_deleted(&self, topic: &str, recovery_token: &str) -> Result<Page> {
+        validate_recovery_token(recovery_token)?;
+        let destination = self.page_path(topic)?;
+        let source = self.recovery_path(&destination, recovery_token)?;
+        self.ensure()?;
+        self.reject_path_components(&source)?;
+        self.reject_path_components(&destination)?;
+        self.reject_occupied_destination(topic, &destination)?;
+
+        match read_snapshot(&source) {
+            Ok(_) => {}
+            Err(Error::Io(error)) if error.kind() == ErrorKind::NotFound => {
+                return Err(Error::NotFound(topic.to_owned()));
+            }
+            Err(error) => return Err(error),
+        }
+
+        self.move_with_sidecar_no_replace(&source, &destination)?;
+        self.read(topic)
+    }
+
     /// Preserve a caller-owned draft without replacing the page currently on disk.
     ///
     /// Conflict copies are ordinary Markdown files adjacent to the page, but their
@@ -327,6 +421,105 @@ impl Vault {
             Err(Error::NotFound(_)) => Ok(None),
             Err(error) => Err(error),
         }
+    }
+
+    fn reject_occupied_destination(&self, topic: &str, path: &Path) -> Result<()> {
+        for candidate in [path.to_path_buf(), metadata_path(path)?] {
+            match fs::symlink_metadata(&candidate) {
+                Ok(metadata) if is_symlink_or_reparse(&metadata) => {
+                    return Err(Error::UnsafeSymlink(candidate));
+                }
+                Ok(_) => return Err(Error::AlreadyExists(topic.to_owned())),
+                Err(error) if error.kind() == ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+        Ok(())
+    }
+
+    fn available_recovery_path(&self, page_path: &Path, digest: &str) -> Result<(String, PathBuf)> {
+        for attempt in 0_u16..=u16::MAX {
+            let token = if attempt == 0 {
+                digest.to_owned()
+            } else {
+                format!("{digest}-{attempt}")
+            };
+            let path = self.recovery_path(page_path, &token)?;
+            self.reject_path_components(&path)?;
+            let sidecar = metadata_path(&path)?;
+
+            let page_available = matches!(
+                fs::symlink_metadata(&path),
+                Err(error) if error.kind() == ErrorKind::NotFound
+            );
+            let sidecar_available = matches!(
+                fs::symlink_metadata(&sidecar),
+                Err(error) if error.kind() == ErrorKind::NotFound
+            );
+            if page_available && sidecar_available {
+                return Ok((token, path));
+            }
+        }
+
+        Err(Error::Io(std::io::Error::new(
+            ErrorKind::AlreadyExists,
+            "could not allocate a unique recovery-copy name",
+        )))
+    }
+
+    fn recovery_path(&self, page_path: &Path, recovery_token: &str) -> Result<PathBuf> {
+        let stem = page_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .and_then(|name| name.strip_suffix(PAGE_SUFFIX))
+            .ok_or_else(|| Error::InvalidTopic(page_path.display().to_string()))?;
+        let parent = page_path
+            .parent()
+            .expect("a page path always has a parent directory");
+        Ok(parent.join(format!("{stem}{DELETED_MARKER}{recovery_token}.md")))
+    }
+
+    fn move_with_sidecar_no_replace(&self, source: &Path, destination: &Path) -> Result<()> {
+        self.ensure_parent_directories(destination)?;
+        self.reject_path_components(source)?;
+        self.reject_path_components(destination)?;
+        let source_sidecar = metadata_path(source)?;
+        let destination_sidecar = metadata_path(destination)?;
+
+        let source_metadata = fs::symlink_metadata(source)?;
+        if is_symlink_or_reparse(&source_metadata) {
+            return Err(Error::UnsafeSymlink(source.to_path_buf()));
+        }
+        if !source_metadata.is_file() {
+            return Err(Error::UnsafeFileType(source.to_path_buf()));
+        }
+
+        let has_sidecar = match fs::symlink_metadata(&source_sidecar) {
+            Ok(metadata) if is_symlink_or_reparse(&metadata) => {
+                return Err(Error::UnsafeSymlink(source_sidecar));
+            }
+            Ok(metadata) if !metadata.is_file() => {
+                return Err(Error::UnsafeFileType(source_sidecar));
+            }
+            Ok(_) => true,
+            Err(error) if error.kind() == ErrorKind::NotFound => false,
+            Err(error) => return Err(error.into()),
+        };
+
+        no_replace_rename(source, destination)?;
+        if has_sidecar {
+            if let Err(error) = no_replace_rename(&source_sidecar, &destination_sidecar) {
+                let rollback = no_replace_rename(destination, source);
+                return Err(Error::Io(match rollback {
+                    Ok(()) => error,
+                    Err(rollback_error) => std::io::Error::other(format!(
+                        "{error}; page rollback also failed: {rollback_error}"
+                    )),
+                }));
+            }
+        }
+
+        Ok(())
     }
 
     fn ensure_parent_directories(&self, path: &Path) -> Result<()> {
@@ -423,12 +616,70 @@ impl Vault {
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn no_replace_rename(source: &Path, destination: &Path) -> std::io::Result<()> {
+    use rustix::fs::{CWD, RenameFlags, renameat_with};
+
+    renameat_with(CWD, source, CWD, destination, RenameFlags::NOREPLACE)
+        .map_err(std::io::Error::from)
+}
+
+#[cfg(windows)]
+fn no_replace_rename(source: &Path, destination: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::MoveFileW;
+
+    let source = source
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let destination = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+
+    // MoveFileW fails when the destination exists; no replace flag is enabled.
+    let result = unsafe { MoveFileW(source.as_ptr(), destination.as_ptr()) };
+    if result == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+fn no_replace_rename(source: &Path, destination: &Path) -> std::io::Result<()> {
+    fs::hard_link(source, destination)?;
+    if let Err(error) = fs::remove_file(source) {
+        let _ = fs::remove_file(destination);
+        return Err(error.into());
+    }
+    Ok(())
+}
+
 fn conflict(topic: &str, expected_revision: &PageRevision, actual: Option<PageRevision>) -> Error {
     Error::Conflict {
         topic: topic.to_owned(),
         expected: expected_revision.clone(),
         actual,
     }
+}
+
+fn metadata_path(page_path: &Path) -> Result<PathBuf> {
+    let stem = page_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .and_then(|name| {
+            name.strip_suffix(PAGE_SUFFIX)
+                .or_else(|| name.strip_suffix(".md"))
+        })
+        .ok_or_else(|| Error::InvalidTopic(page_path.display().to_string()))?;
+    let parent = page_path
+        .parent()
+        .expect("a page path always has a parent directory");
+    Ok(parent.join(format!("{stem}{METADATA_SUFFIX}")))
 }
 
 fn stage_atomic_write(path: &Path, content: &str) -> Result<AtomicWriteFile> {
@@ -574,6 +825,24 @@ fn validate_topic(topic: &str) -> Result<()> {
     Ok(())
 }
 
+fn validate_recovery_token(token: &str) -> Result<()> {
+    let mut parts = token.split('-');
+    let digest = parts.next().unwrap_or_default();
+    let suffix = parts.next();
+    if digest.len() != 64
+        || !digest
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        || suffix.is_some_and(|value| {
+            value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit())
+        })
+        || parts.next().is_some()
+    {
+        return Err(Error::InvalidTopic("invalid recovery token".to_owned()));
+    }
+    Ok(())
+}
+
 fn title_from_content(content: &str, fallback: &str) -> String {
     content
         .lines()
@@ -675,6 +944,161 @@ mod tests {
             Err(Error::Conflict { actual: None, .. })
         ));
         assert!(!original.path.exists());
+    }
+
+    #[test]
+    fn renames_a_page_and_its_metadata_without_overwriting() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let vault = Vault::new(directory.path().join("vault"));
+        let original = vault
+            .create_with_content("git/rebase", "# Rebase\n")
+            .expect("create page");
+        let original_sidecar = vault.root().join("git/rebase.page.meta.yaml");
+        fs::write(&original_sidecar, "version: 1\nid: rebase\n").expect("metadata sidecar");
+
+        let renamed = vault
+            .rename("git/rebase", "git/safe-rebase", &original.revision)
+            .expect("rename page");
+
+        assert_eq!(renamed.topic, "git/safe-rebase");
+        assert!(!original.path.exists());
+        assert!(!original_sidecar.exists());
+        assert_eq!(
+            fs::read_to_string(vault.root().join("git/safe-rebase.page.meta.yaml"))
+                .expect("renamed metadata"),
+            "version: 1\nid: rebase\n"
+        );
+
+        let occupied = vault
+            .create_with_content("git/existing", "# Existing\n")
+            .expect("occupied page");
+        assert!(matches!(
+            vault.rename("git/safe-rebase", "git/existing", &renamed.revision),
+            Err(Error::AlreadyExists(topic)) if topic == "git/existing"
+        ));
+        assert_eq!(vault.read("git/existing").expect("existing page"), occupied);
+        assert!(vault.read("git/safe-rebase").is_ok());
+    }
+
+    #[test]
+    fn rename_requires_the_last_read_revision() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let vault = Vault::new(directory.path().join("vault"));
+        let original = vault
+            .create_with_content("git/rebase", "# Rebase\n")
+            .expect("create page");
+        fs::write(&original.path, "# Changed elsewhere\n").expect("external edit");
+
+        assert!(matches!(
+            vault.rename("git/rebase", "git/safe-rebase", &original.revision),
+            Err(Error::Conflict {
+                actual: Some(_),
+                ..
+            })
+        ));
+        assert!(original.path.exists());
+        assert!(!vault.root().join("git/safe-rebase.page.md").exists());
+    }
+
+    #[test]
+    fn delete_is_recoverable_and_carries_metadata() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let vault = Vault::new(directory.path().join("vault"));
+        let original = vault
+            .create_with_content("git/rebase", "# Rebase\n")
+            .expect("create page");
+        fs::write(
+            vault.root().join("git/rebase.page.meta.yaml"),
+            "version: 1\n",
+        )
+        .expect("metadata sidecar");
+
+        let deleted = vault
+            .delete("git/rebase", &original.revision)
+            .expect("recoverable delete");
+
+        assert!(!original.path.exists());
+        assert!(matches!(vault.read("git/rebase"), Err(Error::NotFound(_))));
+        assert!(deleted.recovery_path.exists());
+        assert!(vault.list().expect("list pages").is_empty());
+        assert!(
+            deleted
+                .recovery_path
+                .with_file_name(format!(
+                    "{}.page.meta.yaml",
+                    deleted
+                        .recovery_path
+                        .file_stem()
+                        .expect("recovery stem")
+                        .to_string_lossy()
+                ))
+                .exists()
+        );
+
+        let restored = vault
+            .restore_deleted("git/rebase", &deleted.recovery_token)
+            .expect("restore deleted page");
+        assert_eq!(restored.content, original.content);
+        assert!(!deleted.recovery_path.exists());
+        assert_eq!(
+            fs::read_to_string(vault.root().join("git/rebase.page.meta.yaml"))
+                .expect("restored metadata"),
+            "version: 1\n"
+        );
+    }
+
+    #[test]
+    fn restore_deleted_does_not_replace_a_recreated_page() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let vault = Vault::new(directory.path().join("vault"));
+        let original = vault
+            .create_with_content("git/rebase", "# Original\n")
+            .expect("create page");
+        let deleted = vault
+            .delete("git/rebase", &original.revision)
+            .expect("recoverable delete");
+        let recreated = vault
+            .create_with_content("git/rebase", "# Recreated\n")
+            .expect("recreate page");
+
+        assert!(matches!(
+            vault.restore_deleted("git/rebase", &deleted.recovery_token),
+            Err(Error::AlreadyExists(topic)) if topic == "git/rebase"
+        ));
+        assert_eq!(vault.read("git/rebase").expect("recreated page"), recreated);
+        assert!(deleted.recovery_path.exists());
+    }
+
+    #[test]
+    fn sidecar_move_failure_rolls_the_page_back() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let vault = Vault::new(directory.path().join("vault"));
+        let original = vault
+            .create_with_content("git/rebase", "# Original\n")
+            .expect("create page");
+        let source_sidecar = vault.root().join("git/rebase.page.meta.yaml");
+        fs::write(&source_sidecar, "version: 1\n").expect("source sidecar");
+        let destination = vault.root().join("git/renamed.page.md");
+        let destination_sidecar = vault.root().join("git/renamed.page.meta.yaml");
+        fs::write(&destination_sidecar, "occupied\n").expect("occupied sidecar");
+
+        assert!(matches!(
+            vault.move_with_sidecar_no_replace(&original.path, &destination),
+            Err(Error::Io(_))
+        ));
+        assert_eq!(
+            fs::read_to_string(&original.path).expect("rolled back page"),
+            "# Original\n"
+        );
+        assert_eq!(
+            fs::read_to_string(source_sidecar).expect("source metadata"),
+            "version: 1\n"
+        );
+        assert!(!destination.exists());
+        assert_eq!(
+            fs::read_to_string(destination_sidecar).expect("occupied metadata"),
+            "occupied\n"
+        );
     }
 
     #[test]

@@ -1,6 +1,6 @@
 # Prior-art research
 
-Snapshot date: 2026-07-18.
+Snapshot date: 2026-07-19.
 
 MyHelp should be a narrow interoperability layer and editor, not a rewrite of
 the mature tools below.
@@ -56,6 +56,28 @@ The resulting decision is an optional adjacent sidecar, documented in
 [ADR 0001](adr/0001-page-metadata-sidecars.md). This gives tags, stable IDs,
 locale, and licensing a typed home without changing the page body or requiring
 a database.
+
+## Focused editor benchmark
+
+A small editor still needs the reliability baseline users learn from mature
+developer tools:
+
+<!-- markdownlint-disable MD013 MD060 -->
+
+| Reference behavior | Competitive bar for MyHelp | Current decision |
+|---|---|---|
+| [massCode command palette](https://masscode.io/documentation/command-palette.html) opens content and creates items from the keyboard | Search, create, save, and view switching must not require a mouse | Direct cross-platform shortcuts cover the narrow primary workflow; a larger command palette waits until there are enough commands to justify one |
+| [massCode Markdown vault](https://masscode.io/documentation/storage.html) supports selectable plain-file storage and live external updates | Vault choice cannot require environment variables, and watcher refresh cannot discard edits | A native chooser switches the core-owned vault; revision checks and readable conflict copies preserve concurrent drafts |
+| [massCode editor preferences](https://masscode.io/documentation/notes/) keep typography roles consistent and configurable | The initial UI must not accumulate unrelated font sizes, line heights, or colors | Shared semantic CSS properties define all component type sizes and light/dark palettes; tests reject one-off font-size declarations |
+| [VS Code Hot Exit](https://code.visualstudio.com/docs/editing/codebasics#_hot-exit) preserves unsaved work across exit | Navigation and native close cannot silently lose a draft | One save/discard/cancel state handles every context change; delete is an adjacent recovery file with Undo |
+| [VS Code accessibility](https://code.visualstudio.com/docs/configure/accessibility/accessibility) treats keyboard, focus, high contrast, zoom, and screen readers as product behavior | Accessibility needs an explicit contract and release matrix, not only semantic markup | MyHelp documents shortcuts, modal focus, live status, contrast-token tests, reduced motion, forced colors, axe checks, and native screen-reader checks |
+
+<!-- markdownlint-enable MD013 MD060 -->
+
+MyHelp does not need massCode's broad workspace or VS Code's configurable
+workbench to meet this bar. It does need equal care for the smaller set of
+actions it exposes: no hidden data loss, no mouse-only path, no opaque storage,
+and no visual value that drifts outside the shared role system.
 
 ## Explicit non-goals for the MVP
 

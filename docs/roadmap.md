@@ -13,9 +13,10 @@
 
 - Atomic writes and conflict detection.
 - CLI terminal rendering and completions.
-- Desktop create/edit/search/save with robust error handling.
+- Desktop create/edit/search/save/rename with recoverable deletion and robust
+  dirty-state handling.
 - File watching for external edits.
-- Accessibility and keyboard navigation.
+- Accessibility, keyboard navigation, and semantic design tokens.
 
 ## Milestone 2: interoperability
 

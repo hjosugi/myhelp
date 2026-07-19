@@ -286,7 +286,7 @@ checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
 
 [[package]]
 name = "myhelp-cli"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -296,16 +296,18 @@ dependencies = [
 
 [[package]]
 name = "myhelp-core"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "atomic-write-file",
  "directories",
  "libc",
+ "rustix",
  "serde",
  "sha2",
  "tempfile",
  "thiserror",
  "walkdir",
+ "windows-sys",
 ]
 
 [[package]]

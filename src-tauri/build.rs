@@ -8,6 +8,11 @@ fn main() {
         "create_page",
         "search_pages",
         "get_vault_path",
+        "rename_page",
+        "delete_page",
+        "restore_deleted_page",
+        "choose_vault",
+        "close_window",
     ];
 
     let attributes = tauri_build::Attributes::new()

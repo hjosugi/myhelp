@@ -1146,7 +1146,7 @@ mod tests {
     fn nested_topic_collisions_get_stable_distinct_names() {
         let directory = tempfile::tempdir().expect("temporary directory");
         let vault = Vault::new(directory.path().join("vault"));
-        for topic in ["foo/bar", "foo-bar", "FOO-BAR"] {
+        for topic in ["foo/bar", "foo-bar"] {
             vault
                 .create_with_content(
                     topic,
@@ -1183,7 +1183,7 @@ mod tests {
             .iter()
             .map(|mapping| mapping.page_file.to_lowercase())
             .collect::<std::collections::BTreeSet<_>>();
-        assert_eq!(unique.len(), 3);
+        assert_eq!(unique.len(), 2);
     }
 
     #[test]
@@ -1226,7 +1226,12 @@ mod tests {
             vault.export_tldr_pages(&destination),
             Err(Error::ExportDestinationOccupied(_))
         ));
-        assert!(!destination.join("git.page.md").exists());
+        let entries = fs::read_dir(&destination)
+            .expect("export directory")
+            .collect::<std::io::Result<Vec<_>>>()
+            .expect("export entries");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].file_name(), "GIT.page.md");
         assert_eq!(
             fs::read_to_string(destination.join("GIT.page.md")).expect("unrelated file"),
             "unrelated\n"
@@ -1256,6 +1261,15 @@ mod tests {
             names[topics.last().expect("long topic")]
                 .0
                 .contains("--myhelp-")
+        );
+
+        let case_names =
+            export_names(["foo-bar", "FOO-BAR"].into_iter()).expect("case-insensitive mappings");
+        assert_ne!(case_names["foo-bar"].0, case_names["FOO-BAR"].0);
+        assert!(
+            case_names
+                .values()
+                .all(|(_, collision_resolved)| *collision_resolved)
         );
     }
 

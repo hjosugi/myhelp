@@ -101,11 +101,26 @@ myhelp list
 myhelp new python/new-project --title "New Python project"
 myhelp edit python/new-project
 myhelp show python/new-project
+myhelp show python/new-project --raw
 myhelp search pytest
+myhelp pick
+myhelp list --json
+myhelp completions fish > ~/.config/fish/completions/myhelp.fish
 myhelp path
 ```
 
 Set `MYHELP_PAGES_DIR` or pass `--pages-dir` to use an existing Markdown vault.
+On a terminal, `show` renders the tldr-style Markdown with terminal-aware color
+and opens an internal pager only when the rendered page is taller than the
+screen. Piped output remains the original Markdown, and `NO_COLOR` or
+`--color never` disables styling. `pick` is an explicit fuzzy selector; it only
+displays or prints a topic and never executes a saved command.
+
+`VISUAL` and `EDITOR` may include arguments such as `code --wait`. MyHelp parses
+the configured command for the current platform and starts it directly without
+invoking a shell. Completion setup, JSON output, pager behavior, shell
+integration, and stable exit codes are documented in the
+[CLI contract](docs/cli.md).
 
 ## Data safety
 

@@ -79,6 +79,25 @@ workbench to meet this bar. It does need equal care for the smaller set of
 actions it exposes: no hidden data loss, no mouse-only path, no opaque storage,
 and no visual value that drifts outside the shared role system.
 
+## Focused terminal benchmark
+
+<!-- markdownlint-disable MD013 MD060 -->
+
+| Reference behavior | Competitive bar for MyHelp | Current decision |
+|---|---|---|
+| [navi usage and shell scripting](https://github.com/denisidoro/navi/tree/master/docs/usage) center an interactive fuzzy workflow and shell composition | Daily selection should be fast without making scripts depend on a TUI | `myhelp pick` is explicit, can print only a selected topic, and never executes page content; `list`, `search`, and `show` stay non-interactive when piped |
+| [cheat editing](https://github.com/cheat/cheat#usage) opens nested sheets in the user's editor | Editor commands such as `code --wait` must work without shell injection or live-file corruption | MyHelp parses Unix and Windows editor command lines, invokes the executable directly, edits a temporary draft, and commits through core revision checks |
+| [tealdeer display configuration](https://tealdeer-rs.github.io/tealdeer/config_display.html) provides styled tldr output and an optional pager | A small help CLI needs readable terminal output, raw composition, and paging on every supported OS | MyHelp renders only on a terminal, honors `NO_COLOR`, preserves raw Markdown in pipes, and uses an internal cross-platform pager only on overflow |
+| [clap completion generation](https://docs.rs/clap_complete/latest/clap_complete/) supports native shell scripts | Completion should cover the maintained shell matrix without hand-written scripts drifting from the parser | Bash, Fish, Zsh, PowerShell, and Elvish scripts are generated from the live `clap` command definition and smoke-tested |
+
+<!-- markdownlint-enable MD013 MD060 -->
+
+Unlike navi, MyHelp's picker does not insert or run a selected command. Unlike
+tealdeer's documented external pager path, which is unavailable on Windows,
+MyHelp uses the same internal paging behavior on Linux, macOS, and Windows.
+This is a deliberately narrow parity target: comfortable reading, selection,
+editing, and shell composition over the same readable vault.
+
 ## Explicit non-goals for the MVP
 
 - Executing saved commands.

@@ -3,7 +3,8 @@
 ## Milestone 0: public scaffold
 
 - Shared Rust core.
-- Basic Rust CLI.
+- Cross-platform Rust CLI with terminal rendering, overflow paging, fuzzy
+  selection, JSON output, shell completions, and safe editor arguments.
 - Tauri 2 and React editor shell.
 - Local Markdown vault.
 - Prior-art research and architecture guardrails.
@@ -12,7 +13,7 @@
 ## Milestone 1: reliable local MVP
 
 - Atomic writes and conflict detection.
-- CLI terminal rendering and completions.
+- CLI terminal rendering and completions. (complete)
 - Desktop create/edit/search/save/rename with recoverable deletion and robust
   dirty-state handling.
 - File watching for external edits.

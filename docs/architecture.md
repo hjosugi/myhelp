@@ -38,11 +38,21 @@ metadata parser while implementation is pending.
 ### `myhelp-cli`
 
 - Uses `clap` for portable argument parsing.
-- Prints raw Markdown in the scaffold; terminal rendering is a separate issue.
+- Renders tldr-style Markdown only for terminal output; pipes receive the
+  original Markdown and list/search can emit deterministic JSON.
+- Honors terminal detection and `NO_COLOR`, and starts its cross-platform
+  internal pager only for interactive output that exceeds the terminal height.
+- Provides an explicit fuzzy page picker and five clap-generated completion
+  targets without making ordinary commands interactive.
 - Opens a temporary working copy in `$VISUAL` or `$EDITOR`, then asks core to
-  save against the last-read revision.
+  save against the last-read revision. Editor strings may contain arguments and
+  are parsed for Unix or Windows before direct process creation; no shell is
+  inserted by MyHelp.
 - Preserves a readable conflict copy when a disk edit wins the revision check.
 - Does not execute page commands.
+
+The stable output, pager, completion, editor, and exit-code rules are specified
+in [`docs/cli.md`](cli.md).
 
 ### `myhelp-desktop`
 

@@ -29,11 +29,14 @@ only through typed Tauri commands.
 - Renames pages without replacing an occupied topic.
 - Moves deleted pages to readable recovery Markdown and restores them on demand.
 - Lists and searches pages.
+- Validates the supported tldr subset and owns byte-preserving,
+  collision-safe tldr/tealdeer import and export.
 
 The accepted [page metadata ADR](adr/0001-page-metadata-sidecars.md) assigns
-optional sidecar path rules, parsing, validation, and diagnostics to core. That
-contract is not implemented yet; CLI and Tauri adapters must not grow their own
-metadata parser while implementation is pending.
+optional sidecar path rules, parsing, validation, and diagnostics to core. The
+tldr adapter can preserve an existing sidecar or generate its narrow
+provenance subset. General metadata parsing is not implemented yet; CLI and
+Tauri adapters must not grow their own parser while it is pending.
 
 ### `myhelp-cli`
 
@@ -49,10 +52,13 @@ metadata parser while implementation is pending.
   are parsed for Unix or Windows before direct process creation; no shell is
   inserted by MyHelp.
 - Preserves a readable conflict copy when a disk edit wins the revision check.
+- Exposes line-oriented tldr validation plus byte-preserving import and
+  deterministic flat export reports.
 - Does not execute page commands.
 
 The stable output, pager, completion, editor, and exit-code rules are specified
-in [`docs/cli.md`](cli.md).
+in [`docs/cli.md`](cli.md). Adapter rules are specified in
+[`docs/tldr.md`](tldr.md).
 
 ### `myhelp-desktop`
 

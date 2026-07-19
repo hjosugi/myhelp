@@ -27,8 +27,7 @@ The initial content conventions follow tldr pages:
 - A flat `git.page.md` file is intended to be directly readable as a tealdeer
   custom page.
 - Nested topics such as `python/new-project.page.md` are a MyHelp organization
-  extension. Export to tealdeer must define a collision-safe flat name such as
-  `python-new-project.page.md`.
+  extension. Export to tealdeer uses a deterministic collision-safe flat name.
 - MyHelp metadata is optional and lives beside the Markdown as
   `<topic>.page.meta.yaml`. The accepted
   [metadata ADR](adr/0001-page-metadata-sidecars.md) keeps the page body
@@ -46,6 +45,18 @@ MyHelp-managed moves carry both files and preserve the ID. Direct
 tldr/tealdeer use continues to consume only `.page.md`. Foreign-format exports
 must report fields they cannot represent and cannot silently discard
 attribution or license data.
+
+## tldr and tealdeer conversion
+
+MyHelp validates a documented tldr subset before import or export. Import keeps
+UTF-8 page bytes unchanged. Flat export lowercases and escapes topics, handles
+Windows reserved filenames and length bounds, and gives every member of a
+case-insensitive collision a stable content-hash suffix. Existing targets are
+never replaced.
+
+The exact commands, supported syntax, mapping algorithm, provenance options,
+and tealdeer zero-copy paths are documented in the
+[tldr and tealdeer interoperability contract](tldr.md).
 
 ## Topic safety
 
@@ -111,4 +122,5 @@ The following still require ADRs and GitHub issues before implementation:
 - [tldr style guide](https://github.com/tldr-pages/tldr/blob/main/contributing-guides/style-guide.md)
 - [tldr client specification](https://github.com/tldr-pages/tldr/blob/main/CLIENT-SPECIFICATION.md)
 - [tealdeer custom pages and patches](https://tealdeer-rs.github.io/tealdeer/usage_custom_pages.html)
+- [MyHelp tldr and tealdeer adapter](tldr.md)
 - [MyHelp metadata ADR](adr/0001-page-metadata-sidecars.md)

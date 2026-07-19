@@ -5,10 +5,14 @@ use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{Shell, generate};
 use dialoguer::{FuzzySelect, theme::ColorfulTheme, theme::SimpleTheme};
-use myhelp_core::{Error as CoreError, Vault};
+use myhelp_core::{
+    Error as CoreError, TldrDiagnostic, TldrDiagnosticLevel, TldrImportOptions, TldrSource,
+    TldrValidation, Vault, validate_tldr_file,
+};
 use output::{TerminalContext, write_page, write_summaries};
+use serde::Serialize;
 use std::io::{ErrorKind, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 pub const EXIT_RUNTIME: u8 = 1;
@@ -104,8 +108,59 @@ enum Commands {
     },
     /// Generate a completion script for a supported shell.
     Completions { shell: Shell },
+    /// Validate, import, or export tldr/tealdeer pages.
+    Tldr {
+        #[command(subcommand)]
+        command: TldrCommands,
+    },
     /// Print the active page directory.
     Path,
+}
+
+#[derive(Debug, Subcommand)]
+enum TldrCommands {
+    /// Validate one tldr-style Markdown file.
+    Validate {
+        path: PathBuf,
+        /// Expected topic when it cannot be derived from the filename.
+        #[arg(long)]
+        topic: Option<String>,
+        /// Print the validation report as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Import a flat tldr or tealdeer custom page without rewriting it.
+    Import {
+        path: PathBuf,
+        /// Destination topic; may contain nested categories.
+        #[arg(long)]
+        topic: Option<String>,
+        /// Page license value, such as an SPDX expression or LicenseRef.
+        #[arg(long)]
+        page_license: Option<String>,
+        /// Absolute provenance URL stored in a new metadata sidecar.
+        #[arg(long)]
+        source_url: Option<String>,
+        /// Human-readable source name.
+        #[arg(long, requires = "source_url")]
+        source_title: Option<String>,
+        /// Source license value, such as an SPDX expression or LicenseRef.
+        #[arg(long, requires = "source_url")]
+        source_license: Option<String>,
+        /// Attribution text retained with the imported content.
+        #[arg(long, requires = "source_url")]
+        attribution: Option<String>,
+        /// Print the conversion report as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Export every vault page to a collision-safe flat directory.
+    Export {
+        destination: PathBuf,
+        /// Print the deterministic mapping as JSON.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Debug, Error)]
@@ -125,22 +180,30 @@ pub(crate) enum CliFailure {
     NoPages,
     #[error("page selection was cancelled")]
     Cancelled,
+    #[error("tldr validation failed for {}", .0.display())]
+    TldrValidationFailed(PathBuf),
 }
 
 pub fn run(cli: Cli) -> Result<()> {
     let terminal = TerminalContext::detect(cli.color);
     let command = cli.command.unwrap_or(Commands::List { json: false });
 
-    if let Commands::Completions { shell } = command {
-        let mut command = Cli::command();
-        let mut generated = Vec::new();
-        generate(shell, &mut command, "myhelp", &mut generated);
-        let stdout = std::io::stdout();
-        stdout
-            .lock()
-            .write_all(&generated)
-            .context("could not write generated completions")?;
-        return Ok(());
+    match &command {
+        Commands::Completions { shell } => {
+            let mut command = Cli::command();
+            let mut generated = Vec::new();
+            generate(*shell, &mut command, "myhelp", &mut generated);
+            let stdout = std::io::stdout();
+            stdout
+                .lock()
+                .write_all(&generated)
+                .context("could not write generated completions")?;
+            return Ok(());
+        }
+        Commands::Tldr {
+            command: TldrCommands::Validate { path, topic, json },
+        } => return validate_tldr(path, topic.as_deref(), *json),
+        _ => {}
     }
 
     let vault = match cli.pages_dir {
@@ -169,9 +232,146 @@ pub fn run(cli: Cli) -> Result<()> {
             print_topic,
             output,
         } => pick_page(&vault, query.as_deref(), print_topic, output, terminal),
+        Commands::Tldr { command } => run_tldr(&vault, command),
         Commands::Path => write_line(&vault.root().display().to_string()),
         Commands::Completions { .. } => unreachable!("handled before vault discovery"),
     }
+}
+
+fn validate_tldr(path: &Path, topic: Option<&str>, json: bool) -> Result<()> {
+    let validation = validate_tldr_file(path, topic)?;
+    write_validation(path, &validation, json)?;
+    if validation.valid {
+        Ok(())
+    } else {
+        Err(CliFailure::TldrValidationFailed(path.to_path_buf()).into())
+    }
+}
+
+fn run_tldr(vault: &Vault, command: TldrCommands) -> Result<()> {
+    match command {
+        TldrCommands::Validate { .. } => unreachable!("handled before vault discovery"),
+        TldrCommands::Import {
+            path,
+            topic,
+            page_license,
+            source_url,
+            source_title,
+            source_license,
+            attribution,
+            json,
+        } => {
+            let source = source_url.map(|url| TldrSource {
+                url,
+                title: source_title,
+                license: source_license,
+                attribution,
+            });
+            let options = TldrImportOptions {
+                topic,
+                page_license,
+                source,
+            };
+            match vault.import_tldr_page(&path, &options) {
+                Ok(report) => {
+                    if json {
+                        write_json(&report)
+                    } else {
+                        write_line(&format!(
+                            "{} -> {}",
+                            path.display(),
+                            report.page_path.display()
+                        ))?;
+                        if let Some(metadata) = report.metadata_path {
+                            write_line(&format!("metadata -> {}", metadata.display()))?;
+                        }
+                        write_diagnostics(&path, &report.validation.diagnostics)
+                    }
+                }
+                Err(error) => report_tldr_failure(error, json),
+            }
+        }
+        TldrCommands::Export { destination, json } => match vault.export_tldr_pages(&destination) {
+            Ok(report) => {
+                if json {
+                    write_json(&report)
+                } else {
+                    for mapping in &report.mappings {
+                        let suffix = if mapping.collision_resolved {
+                            " (collision resolved)"
+                        } else {
+                            ""
+                        };
+                        write_line(&format!(
+                            "{} -> {}{suffix}",
+                            mapping.topic, mapping.page_file
+                        ))?;
+                        write_diagnostics(
+                            Path::new(&mapping.topic),
+                            &mapping.validation.diagnostics,
+                        )?;
+                    }
+                    write_line(&format!(
+                        "exported {} page(s) to {}",
+                        report.mappings.len(),
+                        report.destination.display()
+                    ))
+                }
+            }
+            Err(error) => report_tldr_failure(error, json),
+        },
+    }
+}
+
+fn report_tldr_failure(error: CoreError, json: bool) -> Result<()> {
+    if let CoreError::InvalidTldr { path, diagnostics } = &error {
+        let validation = TldrValidation {
+            valid: false,
+            diagnostics: diagnostics.clone(),
+        };
+        write_validation(path, &validation, json)?;
+    }
+    Err(error.into())
+}
+
+fn write_validation(path: &Path, validation: &TldrValidation, json: bool) -> Result<()> {
+    if json {
+        return write_json(validation);
+    }
+    write_diagnostics(path, &validation.diagnostics)?;
+    if validation.diagnostics.is_empty() {
+        write_line(&format!("{}: valid tldr page", path.display()))?;
+    }
+    Ok(())
+}
+
+fn write_diagnostics(path: &Path, diagnostics: &[TldrDiagnostic]) -> Result<()> {
+    for diagnostic in diagnostics {
+        let level = match diagnostic.level {
+            TldrDiagnosticLevel::Error => "error",
+            TldrDiagnosticLevel::Warning => "warning",
+        };
+        write_line(&format!(
+            "{}:{}: {level}[{}]: {}",
+            path.display(),
+            diagnostic.line,
+            diagnostic.code,
+            diagnostic.message
+        ))?;
+    }
+    Ok(())
+}
+
+fn write_json(value: &impl Serialize) -> Result<()> {
+    let serialized = serde_json::to_vec(value).context("could not serialize command output")?;
+    let stdout = std::io::stdout();
+    let mut output = stdout.lock();
+    output
+        .write_all(&serialized)
+        .context("could not write command output")?;
+    output
+        .write_all(b"\n")
+        .context("could not write command output")
 }
 
 fn pick_page(
@@ -256,6 +456,7 @@ pub fn exit_code(error: &anyhow::Error) -> u8 {
             CliFailure::InteractiveRequired => EXIT_INVALID_DATA,
             CliFailure::NoPages => EXIT_NOT_FOUND,
             CliFailure::Cancelled => EXIT_CANCELLED,
+            CliFailure::TldrValidationFailed(_) => EXIT_INVALID_DATA,
         };
     }
 
@@ -268,6 +469,9 @@ pub fn exit_code(error: &anyhow::Error) -> u8 {
             CoreError::Conflict { .. } => EXIT_CONFLICT,
             CoreError::InvalidTopic(_)
             | CoreError::AlreadyExists(_)
+            | CoreError::InvalidTldr { .. }
+            | CoreError::InvalidImportMetadata(_)
+            | CoreError::ExportDestinationOccupied(_)
             | CoreError::UnsafeSymlink(_)
             | CoreError::UnsafeFileType(_)
             | CoreError::PageTooLarge { .. }

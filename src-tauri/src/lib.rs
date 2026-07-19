@@ -28,6 +28,10 @@ impl CommandError {
             CoreError::UnsafeSymlink(_) | CoreError::UnsafeFileType(_) => ("unsafePath", None),
             CoreError::PageTooLarge { .. } => ("pageTooLarge", None),
             CoreError::InputTooLarge { .. } => ("inputTooLarge", None),
+            CoreError::InvalidTldr { .. } | CoreError::InvalidImportMetadata(_) => {
+                ("invalidData", None)
+            }
+            CoreError::ExportDestinationOccupied(_) => ("alreadyExists", None),
             CoreError::MissingDataDirectory | CoreError::Io(_) | CoreError::WalkDir(_) => {
                 ("storage", None)
             }

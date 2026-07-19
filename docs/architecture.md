@@ -153,6 +153,12 @@ Linux, macOS, and Windows. Desktop Rust compilation and tests also use native
 runners so every watcher backend remains build-checked. Platform-specific
 behavior stays behind core path resolution or narrow adapter modules.
 
+Each native desktop job then builds one representative unsigned package: a
+Debian package on Linux, a disk image on macOS, and an NSIS installer on
+Windows. Package creation is a smoke test rather than a release channel. CI
+uploads the result for seven days with no release-signing keys or repository
+write permission; see [`docs/packaging.md`](packaging.md).
+
 The atomic staging implementation is provided by
 [`atomic-write-file`](https://docs.rs/atomic-write-file/0.3.0/atomic_write_file/);
 the desktop watcher uses [`notify`](https://docs.rs/notify/8.2.0/notify/).

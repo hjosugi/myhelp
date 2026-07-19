@@ -128,3 +128,8 @@ not parse human-facing error text.
 The `tldr validate`, `tldr import`, and `tldr export` reports and their
 no-overwrite guarantees are specified in the
 [tldr and tealdeer adapter contract](tldr.md).
+
+`adapter inspect navi` runs before vault discovery, writes no files, and never
+executes source content. Convertible reports exit with code 0; reports with
+unsupported errors still emit their full human or JSON payload and exit with
+code 5. See the [foreign-format adapter contract](adapters.md).

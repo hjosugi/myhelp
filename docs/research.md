@@ -57,6 +57,32 @@ The resulting decision is an optional adjacent sidecar, documented in
 locale, and licensing a typed home without changing the page body or requiring
 a database.
 
+## Foreign-adapter prototype findings
+
+The July 2026 prototype compared pinned upstream parser and storage models, not
+only README examples:
+
+<!-- markdownlint-disable MD013 MD060 -->
+
+| Tool | Honest intersection | Material losses or boundaries | Compatibility decision |
+|---|---|---|---|
+| navi | `#` descriptions, single-line snippets, and `<name>` placeholders map to tldr examples and `{{name}}` | `%` tags are report-only; `$` command-backed suggestions and `@` inheritance are not evaluated; multiline snippets and multiple contexts need an explicit split policy | Implemented lossy import preview with typed dry-run diagnostics |
+| cheat | Filename/title and merged sheet plus cheatpath tags can become candidate topic and metadata; a body that already validates as tldr could pass through | General bodies are free-form; `syntax`, cheatpath identity, and read-only policy do not fit the page body; automatic structuring would be invented | Read-only index first |
+| pet | A description plus single-line command can become one example; simple `<name>` placeholders can map | Multiline commands, `<name=default>`, output, tags, multi-snippet grouping, and source filenames need policy; sync backends, tokens, and timestamps are operational state | Read-only index first, then explicit per-snippet dry-run previews |
+
+<!-- markdownlint-enable MD013 MD060 -->
+
+No adapter currently claims export or round-trip compatibility. In particular,
+navi and pet consume selected text as executable commands, while MyHelp's page
+contract is display-only. Their program licenses are Apache-2.0 for navi and MIT
+for cheat and pet, but imported sheet content keeps its own license. Current
+test fixtures are original MIT-licensed MyHelp data.
+
+The accepted field-by-field decision, exact upstream revisions, and security
+boundary are in
+[ADR 0002](adr/0002-foreign-format-adapter-levels.md). The user-facing dry-run
+contract is in [the foreign adapter guide](adapters.md).
+
 ## Focused editor benchmark
 
 A small editor still needs the reliability baseline users learn from mature
@@ -121,6 +147,7 @@ relicense imported content.
 - [navi documentation](https://github.com/denisidoro/navi/tree/master/docs)
 - [cheat README](https://github.com/cheat/cheat)
 - [pet README](https://github.com/knqyf263/pet)
+- [MyHelp foreign-format adapter decision](adr/0002-foreign-format-adapter-levels.md)
 - [massCode documentation](https://masscode.io/documentation/)
 - [massCode Markdown vault storage](https://masscode.io/documentation/storage.html)
 - [Tauri architecture](https://v2.tauri.app/concept/architecture/)

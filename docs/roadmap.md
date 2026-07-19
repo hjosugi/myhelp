@@ -23,7 +23,8 @@
 
 - tealdeer zero-copy vault use and collision-safe import/export. (complete)
 - tldr validation and format diagnostics. (complete)
-- navi and cheat import prototypes.
+- navi lossy import preview plus documented cheat and pet read-only adapter
+  boundaries. (complete)
 - [Source and license metadata policy](adr/0001-page-metadata-sidecars.md)
   (accepted; implementation follows through adapter issues).
 

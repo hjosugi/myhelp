@@ -6,8 +6,9 @@ use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{Shell, generate};
 use dialoguer::{FuzzySelect, theme::ColorfulTheme, theme::SimpleTheme};
 use myhelp_core::{
-    Error as CoreError, TldrDiagnostic, TldrDiagnosticLevel, TldrImportOptions, TldrSource,
-    TldrValidation, Vault, validate_tldr_file,
+    AdapterCompatibility, AdapterConversionReport, AdapterDiagnostic, AdapterDiagnosticLevel,
+    AdapterDisposition, Error as CoreError, TldrDiagnostic, TldrDiagnosticLevel, TldrImportOptions,
+    TldrSource, TldrValidation, Vault, inspect_navi_file, validate_tldr_file,
 };
 use output::{TerminalContext, write_page, write_summaries};
 use serde::Serialize;
@@ -113,6 +114,11 @@ enum Commands {
         #[command(subcommand)]
         command: TldrCommands,
     },
+    /// Inspect foreign formats without executing commands or changing the vault.
+    Adapter {
+        #[command(subcommand)]
+        command: AdapterCommands,
+    },
     /// Print the active page directory.
     Path,
 }
@@ -163,6 +169,28 @@ enum TldrCommands {
     },
 }
 
+#[derive(Debug, Subcommand)]
+enum AdapterCommands {
+    /// Generate a dry-run conversion report for one foreign-format file.
+    Inspect {
+        /// Source format. Navi is the first implemented prototype.
+        #[arg(value_enum)]
+        format: AdapterFormat,
+        path: PathBuf,
+        /// Proposed MyHelp topic; defaults to the source filename.
+        #[arg(long)]
+        topic: Option<String>,
+        /// Print the complete conversion report as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+enum AdapterFormat {
+    Navi,
+}
+
 #[derive(Debug, Error)]
 pub(crate) enum CliFailure {
     #[error("VISUAL/EDITOR configuration is invalid: {0}")]
@@ -182,6 +210,8 @@ pub(crate) enum CliFailure {
     Cancelled,
     #[error("tldr validation failed for {}", .0.display())]
     TldrValidationFailed(PathBuf),
+    #[error("adapter conversion is not safe for import: {}", .0.display())]
+    AdapterConversionFailed(PathBuf),
 }
 
 pub fn run(cli: Cli) -> Result<()> {
@@ -203,6 +233,15 @@ pub fn run(cli: Cli) -> Result<()> {
         Commands::Tldr {
             command: TldrCommands::Validate { path, topic, json },
         } => return validate_tldr(path, topic.as_deref(), *json),
+        Commands::Adapter {
+            command:
+                AdapterCommands::Inspect {
+                    format,
+                    path,
+                    topic,
+                    json,
+                },
+        } => return inspect_adapter(*format, path, topic.as_deref(), *json),
         _ => {}
     }
 
@@ -233,8 +272,95 @@ pub fn run(cli: Cli) -> Result<()> {
             output,
         } => pick_page(&vault, query.as_deref(), print_topic, output, terminal),
         Commands::Tldr { command } => run_tldr(&vault, command),
+        Commands::Adapter { .. } => unreachable!("handled before vault discovery"),
         Commands::Path => write_line(&vault.root().display().to_string()),
         Commands::Completions { .. } => unreachable!("handled before vault discovery"),
+    }
+}
+
+fn inspect_adapter(
+    format: AdapterFormat,
+    path: &Path,
+    topic: Option<&str>,
+    json: bool,
+) -> Result<()> {
+    let report = match format {
+        AdapterFormat::Navi => inspect_navi_file(path, topic)?,
+    };
+    write_adapter_report(&report, json)?;
+    if report.convertible {
+        Ok(())
+    } else {
+        Err(CliFailure::AdapterConversionFailed(path.to_path_buf()).into())
+    }
+}
+
+fn write_adapter_report(report: &AdapterConversionReport, json: bool) -> Result<()> {
+    if json {
+        return write_json(report);
+    }
+
+    write_line(&format!(
+        "{} -> {} (dry-run, {})",
+        report.source_path.display(),
+        report.topic,
+        compatibility_label(report.compatibility)
+    ))?;
+    write_line(if report.convertible {
+        "status: convertible with the reported losses"
+    } else {
+        "status: not convertible without resolving errors"
+    })?;
+    if !report.source_tags.is_empty() {
+        write_line(&format!("source tags: {}", report.source_tags.join(", ")))?;
+    }
+    write_adapter_diagnostics(&report.source_path, &report.diagnostics)?;
+    if let Some(page) = &report.generated_page {
+        write_line("generated page preview:")?;
+        let stdout = std::io::stdout();
+        let mut output = stdout.lock();
+        output
+            .write_all(page.as_bytes())
+            .context("could not write command output")?;
+    }
+    Ok(())
+}
+
+fn write_adapter_diagnostics(path: &Path, diagnostics: &[AdapterDiagnostic]) -> Result<()> {
+    for diagnostic in diagnostics {
+        let level = match diagnostic.level {
+            AdapterDiagnosticLevel::Info => "info",
+            AdapterDiagnosticLevel::Warning => "warning",
+            AdapterDiagnosticLevel::Error => "error",
+        };
+        let location = diagnostic.line.map_or_else(
+            || path.display().to_string(),
+            |line| format!("{}:{line}", path.display()),
+        );
+        write_line(&format!(
+            "{location}: {level}[{}] {} ({}): {}",
+            diagnostic.code,
+            diagnostic.source_field,
+            disposition_label(diagnostic.disposition),
+            diagnostic.message
+        ))?;
+    }
+    Ok(())
+}
+
+fn compatibility_label(compatibility: AdapterCompatibility) -> &'static str {
+    match compatibility {
+        AdapterCompatibility::LossyImportPreview => "lossy import preview",
+        AdapterCompatibility::ReadOnlyIndex => "read-only index",
+        AdapterCompatibility::Unsupported => "unsupported",
+    }
+}
+
+fn disposition_label(disposition: AdapterDisposition) -> &'static str {
+    match disposition {
+        AdapterDisposition::Mapped => "mapped",
+        AdapterDisposition::ReportedOnly => "reported only",
+        AdapterDisposition::Unsupported => "unsupported",
     }
 }
 
@@ -456,7 +582,9 @@ pub fn exit_code(error: &anyhow::Error) -> u8 {
             CliFailure::InteractiveRequired => EXIT_INVALID_DATA,
             CliFailure::NoPages => EXIT_NOT_FOUND,
             CliFailure::Cancelled => EXIT_CANCELLED,
-            CliFailure::TldrValidationFailed(_) => EXIT_INVALID_DATA,
+            CliFailure::TldrValidationFailed(_) | CliFailure::AdapterConversionFailed(_) => {
+                EXIT_INVALID_DATA
+            }
         };
     }
 

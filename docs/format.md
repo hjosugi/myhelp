@@ -34,6 +34,10 @@ The initial content conventions follow tldr pages:
   unchanged.
 - Importers for navi, cheat, or pet belong in adapter crates or modules and must
   retain the original source where licensing requires it.
+- Foreign adapters declare a lossy-preview, read-only-index, or unsupported
+  compatibility level. The navi prototype is dry-run only; cheat and pet remain
+  read-only-index decisions until their grouping and metadata policies are
+  implemented.
 
 ## Optional metadata
 
@@ -124,3 +128,5 @@ The following still require ADRs and GitHub issues before implementation:
 - [tealdeer custom pages and patches](https://tealdeer-rs.github.io/tealdeer/usage_custom_pages.html)
 - [MyHelp tldr and tealdeer adapter](tldr.md)
 - [MyHelp metadata ADR](adr/0001-page-metadata-sidecars.md)
+- [MyHelp foreign-format adapters](adapters.md)
+- [Foreign-format compatibility ADR](adr/0002-foreign-format-adapter-levels.md)

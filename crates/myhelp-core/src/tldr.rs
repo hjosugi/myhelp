@@ -572,32 +572,11 @@ fn reject_export_directory(path: &Path) -> Result<()> {
         Ok(metadata) if is_symlink_or_reparse(&metadata) => {
             Err(Error::UnsafeSymlink(path.to_path_buf()))
         }
-        Ok(metadata) if metadata.is_dir() => reject_existing_path_components(path),
+        Ok(metadata) if metadata.is_dir() => Ok(()),
         Ok(_) => Err(Error::UnsafeFileType(path.to_path_buf())),
-        Err(error) if error.kind() == ErrorKind::NotFound => {
-            if let Some(parent) = path.parent() {
-                reject_existing_path_components(parent)?;
-            }
-            Ok(())
-        }
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error.into()),
     }
-}
-
-fn reject_existing_path_components(path: &Path) -> Result<()> {
-    let mut current = PathBuf::new();
-    for component in path.components() {
-        current.push(component.as_os_str());
-        match fs::symlink_metadata(&current) {
-            Ok(metadata) if is_symlink_or_reparse(&metadata) => {
-                return Err(Error::UnsafeSymlink(current));
-            }
-            Ok(_) => {}
-            Err(error) if error.kind() == ErrorKind::NotFound => break,
-            Err(error) => return Err(error.into()),
-        }
-    }
-    Ok(())
 }
 
 fn reject_export_target(path: &Path) -> Result<()> {
@@ -1318,6 +1297,15 @@ mod tests {
                 .next()
                 .is_none()
         );
+
+        let real_parent = directory.path().join("real-parent");
+        fs::create_dir(&real_parent).expect("real parent");
+        let parent_link = directory.path().join("linked-parent");
+        symlink(&real_parent, &parent_link).expect("parent symlink");
+        vault
+            .export_tldr_pages(&parent_link.join("export"))
+            .expect("platform symlink above the export boundary is allowed");
+        assert!(real_parent.join("export/git.page.md").is_file());
     }
 
     #[test]

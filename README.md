@@ -53,8 +53,8 @@ instead of inventing another closed database. See
 
 ```text
 myhelp
-├── crates/myhelp-core    file model, platform paths, list/read/write/search
-├── crates/myhelp-cli     list, show, new, edit, search, path
+├── crates/myhelp-core    storage, validation, import/export, page rules
+├── crates/myhelp-cli     terminal UX, tldr adapters, completions
 ├── src                   React editor and Markdown preview
 ├── src-tauri             Tauri commands that call myhelp-core
 └── docs                  architecture, format, research, roadmap
@@ -105,6 +105,9 @@ myhelp show python/new-project --raw
 myhelp search pytest
 myhelp pick
 myhelp list --json
+myhelp tldr validate ./git.md
+myhelp tldr import ./git.page.md --topic work/git
+myhelp tldr export ./tealdeer-pages --json
 myhelp completions fish > ~/.config/fish/completions/myhelp.fish
 myhelp path
 ```
@@ -121,6 +124,12 @@ the configured command for the current platform and starts it directly without
 invoking a shell. Completion setup, JSON output, pager behavior, shell
 integration, and stable exit codes are documented in the
 [CLI contract](docs/cli.md).
+
+The tldr adapter preserves imported page bytes, reports line-oriented
+diagnostics, and exports nested topics through a deterministic,
+case-insensitive collision-safe mapping without overwriting existing files.
+Flat vaults can also be used directly as a tealdeer custom-page directory.
+See the [tldr and tealdeer interoperability contract](docs/tldr.md).
 
 ## Data safety
 
@@ -188,7 +197,9 @@ MyHelp starts with the tldr custom-page convention:
 
 Flat `<topic>.page.md` files can be consumed directly by tealdeer when its custom
 page directory points at the vault. Nested topics are a MyHelp organization
-extension and will use an explicit export mapping. See [the format contract](docs/format.md).
+extension and use an explicit export mapping. See
+[the format contract](docs/format.md) and
+[the adapter guide](docs/tldr.md).
 
 ## Official references
 

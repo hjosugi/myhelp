@@ -21,8 +21,8 @@
 
 ## Milestone 2: interoperability
 
-- tealdeer vault selection and import/export.
-- tldr validation and format diagnostics.
+- tealdeer zero-copy vault use and collision-safe import/export. (complete)
+- tldr validation and format diagnostics. (complete)
 - navi and cheat import prototypes.
 - [Source and license metadata policy](adr/0001-page-metadata-sidecars.md)
   (accepted; implementation follows through adapter issues).

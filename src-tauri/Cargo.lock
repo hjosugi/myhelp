@@ -1835,22 +1835,25 @@ dependencies = [
 
 [[package]]
 name = "myhelp-core"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "atomic-write-file",
  "directories",
  "libc",
  "rustix",
  "serde",
+ "serde_json",
  "sha2",
+ "tempfile",
  "thiserror 2.0.18",
+ "uuid",
  "walkdir",
  "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "myhelp-desktop"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "myhelp-core",
  "notify",
@@ -3430,6 +3433,19 @@ dependencies = [
  "dunce",
  "embed-resource",
  "toml 1.1.3+spec-1.1.0",
+]
+
+[[package]]
+name = "tempfile"
+version = "3.27.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
+dependencies = [
+ "fastrand",
+ "getrandom 0.4.3",
+ "once_cell",
+ "rustix",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

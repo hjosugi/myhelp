@@ -19,6 +19,7 @@ dialoguer = { version = "0.12", default-features = false, features = ["fuzzy-sel
 minus = { version = "5.7", default-features = false, features = ["search", "static_output"] }
 myhelp-core = { path = "../myhelp-core" }
 serde_json = "1"
+serde.workspace = true
 shell-words = "1"
 tempfile = "3"
 termimad = "0.35"

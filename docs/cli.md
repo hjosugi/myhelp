@@ -124,3 +124,7 @@ remain the same as the storage contract.
 
 Machine-readable consumers should use `--raw`, `--json`, or `path` and should
 not parse human-facing error text.
+
+The `tldr validate`, `tldr import`, and `tldr export` reports and their
+no-overwrite guarantees are specified in the
+[tldr and tealdeer adapter contract](tldr.md).

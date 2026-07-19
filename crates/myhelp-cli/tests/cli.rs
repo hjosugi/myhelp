@@ -87,6 +87,10 @@ fn generated_completions_cover_every_documented_shell() {
         let output = myhelp(&["completions", shell], &missing_path);
         assert!(output.status.success(), "{shell}: {:?}", output.stderr);
         assert!(!output.stdout.is_empty(), "{shell}");
+        assert!(
+            String::from_utf8_lossy(&output.stdout).contains("tldr"),
+            "{shell} completion must include the tldr adapter"
+        );
     }
 }
 
@@ -128,4 +132,113 @@ fn stable_exit_codes_cover_missing_invalid_and_noninteractive_pick() {
         Some(5),
         "pick must not try to control a noninteractive terminal"
     );
+}
+
+#[test]
+fn tldr_validation_is_line_oriented_and_does_not_require_a_vault() {
+    let directory = tempfile::tempdir().expect("temporary directory");
+    let valid = directory.path().join("git.page.md");
+    fs::write(
+        &valid,
+        "# Git\n\n> Work with repositories.\n\n- Show status:\n\n`git status`\n",
+    )
+    .expect("valid tldr page");
+    let missing_vault = directory.path().join("missing-vault");
+
+    let valid_output = myhelp(
+        &[
+            "tldr",
+            "validate",
+            valid.to_str().expect("UTF-8 path"),
+            "--json",
+        ],
+        &missing_vault,
+    );
+    assert!(valid_output.status.success());
+    let report: Value = serde_json::from_slice(&valid_output.stdout).expect("validation JSON");
+    assert_eq!(report["valid"], true);
+
+    let invalid = directory.path().join("broken.page.md");
+    fs::write(&invalid, "# Broken\n\n- Missing command:\n").expect("invalid tldr page");
+    let invalid_output = myhelp(
+        &[
+            "tldr",
+            "validate",
+            invalid.to_str().expect("UTF-8 path"),
+            "--json",
+        ],
+        &missing_vault,
+    );
+    assert_eq!(invalid_output.status.code(), Some(5));
+    let report: Value = serde_json::from_slice(&invalid_output.stdout).expect("invalid JSON");
+    assert_eq!(report["valid"], false);
+    assert!(
+        report["diagnostics"]
+            .as_array()
+            .expect("diagnostics")
+            .iter()
+            .all(|diagnostic| diagnostic["line"].as_u64().is_some_and(|line| line > 0))
+    );
+}
+
+#[test]
+fn tldr_import_and_export_preserve_content_metadata_and_mapping() {
+    let directory = tempfile::tempdir().expect("temporary directory");
+    let vault = directory.path().join("vault");
+    let source = directory.path().join("git.page.md");
+    let content = "# Git\n\n> Work with repositories.\n\n- Show status:\n\n`git status`\n";
+    fs::write(&source, content).expect("source page");
+
+    let imported = myhelp(
+        &[
+            "tldr",
+            "import",
+            source.to_str().expect("UTF-8 path"),
+            "--topic",
+            "work/git",
+            "--source-url",
+            "https://github.com/tldr-pages/tldr",
+            "--source-license",
+            "CC-BY-4.0",
+            "--attribution",
+            "tldr-pages contributors",
+            "--json",
+        ],
+        &vault,
+    );
+    assert!(
+        imported.status.success(),
+        "{}",
+        String::from_utf8_lossy(&imported.stderr)
+    );
+    let import_report: Value = serde_json::from_slice(&imported.stdout).expect("import JSON");
+    assert_eq!(import_report["topic"], "work/git");
+    assert_eq!(
+        fs::read_to_string(vault.join("work/git.page.md")).expect("imported content"),
+        content
+    );
+    assert!(vault.join("work/git.page.meta.yaml").is_file());
+
+    let destination = directory.path().join("export");
+    let exported = myhelp(
+        &[
+            "tldr",
+            "export",
+            destination.to_str().expect("UTF-8 path"),
+            "--json",
+        ],
+        &vault,
+    );
+    assert!(
+        exported.status.success(),
+        "{}",
+        String::from_utf8_lossy(&exported.stderr)
+    );
+    let export_report: Value = serde_json::from_slice(&exported.stdout).expect("export JSON");
+    assert_eq!(export_report["mappings"][0]["topic"], "work/git");
+    assert_eq!(
+        fs::read_to_string(destination.join("work-git.page.md")).expect("exported content"),
+        content
+    );
+    assert!(destination.join("work-git.page.meta.yaml").is_file());
 }

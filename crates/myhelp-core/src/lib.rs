@@ -10,6 +10,12 @@ use std::time::UNIX_EPOCH;
 use thiserror::Error;
 use walkdir::WalkDir;
 
+mod tldr;
+pub use tldr::{
+    TldrDiagnostic, TldrDiagnosticLevel, TldrExportMapping, TldrExportReport, TldrImportOptions,
+    TldrImportReport, TldrSource, TldrValidation, validate_tldr_file, validate_tldr_page,
+};
+
 const PAGE_SUFFIX: &str = ".page.md";
 const CONFLICT_MARKER: &str = ".page.conflict-";
 const DELETED_MARKER: &str = ".page.deleted-";
@@ -40,6 +46,15 @@ pub enum Error {
     UnsafeFileType(PathBuf),
     #[error("page exceeds the {max_bytes}-byte limit: {}", path.display())]
     PageTooLarge { path: PathBuf, max_bytes: usize },
+    #[error("tldr validation failed for {}", path.display())]
+    InvalidTldr {
+        path: PathBuf,
+        diagnostics: Vec<TldrDiagnostic>,
+    },
+    #[error("invalid import metadata: {0}")]
+    InvalidImportMetadata(String),
+    #[error("export destination is already occupied: {}", .0.display())]
+    ExportDestinationOccupied(PathBuf),
     #[error("{field} exceeds the {max_bytes}-byte limit")]
     InputTooLarge {
         field: &'static str,

@@ -17,7 +17,7 @@ clap.workspace = true
 clap_complete = "4"
 dialoguer = { version = "0.12", default-features = false, features = ["fuzzy-select"] }
 minus = { version = "5.7", default-features = false, features = ["search", "static_output"] }
-myhelp-core = { path = "../myhelp-core" }
+myhelp-core = { version = "0.7.0", path = "../myhelp-core" }
 serde_json = "1"
 serde.workspace = true
 shell-words = "1"
@@ -25,3 +25,9 @@ tempfile = "3"
 termimad = "0.35"
 thiserror.workspace = true
 winsplit = "0.1"
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/myhelp-cli-{ target }-v{ version }.tgz"
+bin-dir = "myhelp-cli-{ target }-v{ version }/{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+disabled-strategies = ["quick-install"]

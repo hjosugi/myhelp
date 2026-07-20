@@ -632,7 +632,7 @@ dependencies = [
 
 [[package]]
 name = "myhelp-cli"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -651,7 +651,7 @@ dependencies = [
 
 [[package]]
 name = "myhelp-core"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "atomic-write-file",
  "directories",

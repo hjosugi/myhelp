@@ -22,7 +22,8 @@ before changing the architecture.
 ## Repository map
 
 - `crates/myhelp-core`: platform-independent storage and page rules.
-- `crates/myhelp-cli`: terminal UX; it must depend on core rather than duplicate it.
+- `crates/myhelp-cli`: terminal UX; it must depend on core rather than
+  duplicate it.
 - `src-tauri`: a thin Tauri adapter over core.
 - `src`: React UI; filesystem access must go through typed Tauri commands.
 - `docs`: decisions, research, and interoperability contracts.
@@ -46,6 +47,8 @@ cargo test --manifest-path src-tauri/Cargo.toml --all-targets --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
 pnpm icons:check
+pnpm release:test
+pnpm release:check
 pnpm test
 pnpm build
 ```
@@ -61,8 +64,9 @@ pnpm tauri build --bundles dmg
 pnpm tauri build --bundles nsis
 ```
 
-These bundles are unsigned inspection artifacts. Publishing and signing belong
-to the release workflow, not ordinary pull-request CI.
+These bundles are unsigned inspection artifacts. Native CI also installs and
+removes the exact bundle before normalizing its artifact name. Publishing and
+signing belong to the tag workflow, not ordinary pull-request CI.
 
 The repository intentionally has two Cargo workspaces and lockfiles. The root
 workspace contains `myhelp-core` and `myhelp-cli`; `src-tauri` is the desktop

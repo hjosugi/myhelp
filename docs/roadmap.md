@@ -30,9 +30,12 @@
 
 ## Milestone 3: distribution
 
-- Signed or checksummed binaries for Linux, macOS, and Windows.
+- Checksummed, SBOM-inventoried, provenance-attested CLI archives for Linux,
+  macOS, and Windows. (complete)
 - Homebrew, Scoop/WinGet, cargo-binstall, and Linux packaging evaluation.
-- Desktop packages and automatic update policy.
+  (complete; promotion requirements are deferred by channel)
+- Unsigned desktop package install/remove checks and automatic update policy.
+  (checks complete; signing and the updater remain deferred)
 
 ## Milestone 4: optional collaboration
 

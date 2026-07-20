@@ -28,13 +28,15 @@ cargo test --manifest-path src-tauri/Cargo.toml --all-targets --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
 pnpm icons:check
+pnpm release:test
+pnpm release:check
 pnpm test
 pnpm build
 ```
 
 Also run the host-specific packaging smoke command documented in
-[`docs/packaging.md`](docs/packaging.md). CI builds an unsigned `deb`, `dmg`, or
-NSIS installer on its matching native runner.
+[`docs/packaging.md`](docs/packaging.md). CI builds, installs, and removes an
+unsigned `deb`, `dmg`, or NSIS installer on its matching native runner.
 
 Include:
 

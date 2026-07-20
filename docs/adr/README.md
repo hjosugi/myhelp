@@ -9,6 +9,7 @@ vault format, interoperability, security, or more than one application layer.
 |---|---|---|
 | [0001](0001-page-metadata-sidecars.md) | Accepted | Keep optional page metadata in adjacent YAML sidecars |
 | [0002](0002-foreign-format-adapter-levels.md) | Accepted | Use explicit lossy-preview, read-only, or unsupported compatibility levels for foreign formats |
+| [0003](0003-release-channels-and-artifact-promotion.md) | Accepted | Test and attest exact CLI and desktop artifacts before advertising a release channel |
 
 <!-- markdownlint-enable MD060 -->
 

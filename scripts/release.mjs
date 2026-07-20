@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
@@ -280,6 +280,8 @@ export function smokeCliArchive(archiveValue, target) {
   const pages = join(extraction, "vault");
   const binary = join(installRoot, executableName(target));
   const archiveRoot = basename(installRoot);
+  const archiveDirectory = dirname(archive);
+  const archiveName = basename(archive);
   const expectedEntries = [
     `${archiveRoot}/`,
     `${archiveRoot}/LICENSE`,
@@ -288,7 +290,8 @@ export function smokeCliArchive(archiveValue, target) {
   ].sort();
 
   try {
-    const entries = run("tar", ["-tzf", archive], {
+    const entries = run("tar", ["-tzf", archiveName], {
+      cwd: archiveDirectory,
       stdio: "pipe",
     }).stdout
       .split(/\r?\n/)
@@ -300,7 +303,10 @@ export function smokeCliArchive(archiveValue, target) {
       "CLI archive must contain only the documented target/version directory",
     );
 
-    run("tar", ["-xzf", archive, "-C", extraction], { stdio: "pipe" });
+    run("tar", ["-xzf", archiveName, "-C", extraction], {
+      cwd: archiveDirectory,
+      stdio: "pipe",
+    });
     const extractedFiles = walkRegularFiles(installRoot)
       .map((path) => basename(path))
       .sort();

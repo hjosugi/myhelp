@@ -202,7 +202,7 @@ jobs:
             rm -rf "$install_root" "$mount_point"
           }
           trap cleanup EXIT
-          hdiutil attach \
+          printf 'Y\n' | env PAGER=cat hdiutil attach \
             -readonly \
             -nobrowse \
             -mountpoint "$mount_point" \
@@ -261,6 +261,7 @@ jobs:
             throw "NSIS uninstall left application files behind"
           }
       - name: Normalize tested desktop bundle
+        shell: bash
         env:
           BUNDLE: ${{ matrix.bundle }}
           TARGET: ${{ matrix.target }}

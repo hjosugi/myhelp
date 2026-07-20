@@ -62,6 +62,40 @@ myhelp
 
 No page content is uploaded, and the MVP does not execute saved commands.
 
+## Install the CLI
+
+MyHelp v0.7.0 publishes tested CLI archives for Linux x64, macOS Apple Silicon,
+and Windows x64. Each release includes `SHA256SUMS`, an SPDX source SBOM, and
+GitHub provenance. Archive contents and removal are smoke-tested on the
+matching native runner before publication.
+
+The Nix app remains the shortest source-build path on Linux and macOS:
+
+```bash
+nix run github:hjosugi/myhelp/v0.7.0 -- --version
+nix run github:hjosugi/myhelp/v0.7.0 -- list
+```
+
+Cargo can install the immutable release tag:
+
+```bash
+cargo install \
+  --git https://github.com/hjosugi/myhelp \
+  --tag v0.7.0 \
+  --locked \
+  myhelp-cli
+cargo uninstall myhelp-cli
+```
+
+Download, checksum, provenance, update, and uninstall instructions for each
+archive are in [the packaging guide](docs/packaging.md).
+
+Native `deb`, `dmg`, and NSIS bundles are attached to prereleases as visibly
+unsigned evaluation artifacts. They are not yet an advertised desktop
+installation channel. See the
+[release decision](docs/adr/0003-release-channels-and-artifact-promotion.md)
+and [signing-key threat model](docs/release-signing.md).
+
 ## Development
 
 The repository includes a Nix Flake for Linux development:
@@ -88,11 +122,10 @@ nix run github:hjosugi/myhelp -- list
 nix build github:hjosugi/myhelp#myhelp-cli
 ```
 
-This packages only the portable CLI. Desktop packaging remains native
-platform work. CI builds an unsigned native package on Linux, macOS, and
-Windows and retains each package for seven days as an inspection artifact.
-These smoke artifacts are not advertised distribution channels; see the
-[packaging checks](docs/packaging.md).
+This packages only the portable CLI. Desktop packaging remains native platform
+work. CI builds, installs, and removes an unsigned native package on Linux,
+macOS, and Windows and retains each normalized package for seven days. See the
+[packaging and release checks](docs/packaging.md).
 
 ## CLI preview
 

@@ -3,50 +3,145 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
 
 permissions:
   contents: read
 
-jobs:
-  rust:
-    name: Rust (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
+jobs:
+  release-contract:
+    name: Release contract
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
         with:
-          toolchain: stable
-          components: clippy,rustfmt
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-      - run: cargo fmt --all --check
-      - run: cargo test --workspace --locked
-      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - id: version
+        name: Validate synchronized version and release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            version="$(node scripts/release.mjs validate "$GITHUB_REF_NAME")"
+            test "$(git cat-file -t "refs/tags/$GITHUB_REF_NAME")" = "tag"
+            tag_commit="$(git rev-list -n 1 "$GITHUB_REF_NAME")"
+            test "$tag_commit" = "$(git rev-parse HEAD)"
+            git merge-base --is-ancestor "$tag_commit" origin/main
+          else
+            version="$(node scripts/release.mjs validate)"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - run: node --test scripts/release.node-test.mjs
 
-  desktop-rust:
-    name: Desktop (${{ matrix.os }} / ${{ matrix.bundle }})
+  rust:
+    name: Rust and CLI archive (${{ matrix.target }})
+    needs: release-contract
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
-            bundle: deb
-            artifact_path: src-tauri/target/release/bundle/deb/*.deb
+            target: x86_64-unknown-linux-gnu
+            binary: target/release/myhelp
+            executable_suffix: ""
           - os: macos-latest
-            bundle: dmg
-            artifact_path: src-tauri/target/release/bundle/dmg/*.dmg
+            target: aarch64-apple-darwin
+            binary: target/release/myhelp
+            executable_suffix: ""
           - os: windows-latest
-            bundle: nsis
-            artifact_path: src-tauri/target/release/bundle/nsis/*-setup.exe
+            target: x86_64-pc-windows-msvc
+            binary: target/release/myhelp.exe
+            executable_suffix: ".exe"
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: stable
+          components: clippy,rustfmt
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: cargo fmt --all --check
+      - run: cargo test --workspace --locked
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo build -p myhelp-cli --release --locked
+      - name: Smoke cargo install and uninstall
+        shell: bash
+        run: |
+          set -euo pipefail
+          install_root="$RUNNER_TEMP/myhelp-cargo-install"
+          cargo install \
+            --path crates/myhelp-cli \
+            --locked \
+            --root "$install_root"
+          binary="$install_root/bin/myhelp${{ matrix.executable_suffix }}"
+          "$binary" --version
+          cargo uninstall --root "$install_root" myhelp-cli
+          test ! -e "$binary"
+      - name: Stage and smoke CLI archive
+        shell: bash
+        env:
+          BINARY: ${{ matrix.binary }}
+          TARGET: ${{ matrix.target }}
+          VERSION: ${{ needs.release-contract.outputs.version }}
+        run: |
+          set -euo pipefail
+          node scripts/release.mjs stage-cli \
+            "$VERSION" \
+            "$TARGET" \
+            "$BINARY" \
+            release-assets
+          node scripts/release.mjs smoke-cli \
+            "release-assets/myhelp-cli-$TARGET-v$VERSION.tgz" \
+            "$TARGET"
+      - name: Upload tested CLI archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-cli-${{ matrix.target }}
+          path: release-assets/myhelp-cli-${{ matrix.target }}-v${{ needs.release-contract.outputs.version }}.tgz
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  desktop-rust:
+    name: Desktop (${{ matrix.target }} / ${{ matrix.bundle }})
+    needs: release-contract
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            bundle: deb
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            bundle: dmg
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundle: nsis
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - name: Install Tauri prerequisites
         if: runner.os == 'Linux'
         run: |
@@ -65,9 +160,6 @@ jobs:
         with:
           toolchain: stable
           components: clippy,rustfmt
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        with:
-          workspaces: src-tauri -> target
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --all --check
       - run: cargo test --manifest-path src-tauri/Cargo.toml --all-targets --locked
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
@@ -77,20 +169,121 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
-          cache: pnpm
+          package-manager-cache: false
       - run: pnpm install --frozen-lockfile
       - run: pnpm tauri build --bundles ${{ matrix.bundle }}
-      - name: Upload unsigned bundle for inspection
+      - name: Smoke Debian install and removal
+        if: matrix.bundle == 'deb'
+        shell: bash
+        run: |
+          set -euo pipefail
+          packages=(src-tauri/target/release/bundle/deb/*.deb)
+          test "${#packages[@]}" -eq 1
+          test -f "${packages[0]}"
+          trap 'sudo dpkg --remove my-help >/dev/null 2>&1 || true' EXIT
+          sudo dpkg --install "${packages[0]}"
+          test "$(dpkg-query -W -f='${db:Status-Status}' my-help)" = "installed"
+          test -x /usr/bin/myhelp-desktop
+          sudo dpkg --remove my-help
+          test ! -e /usr/bin/myhelp-desktop
+      - name: Smoke macOS copy and removal
+        if: matrix.bundle == 'dmg'
+        shell: bash
+        run: |
+          set -euo pipefail
+          packages=(src-tauri/target/release/bundle/dmg/*.dmg)
+          test "${#packages[@]}" -eq 1
+          test -f "${packages[0]}"
+          mount_point="$RUNNER_TEMP/myhelp-dmg"
+          install_root="$RUNNER_TEMP/myhelp-applications"
+          mkdir -p "$mount_point" "$install_root"
+          cleanup() {
+            hdiutil detach "$mount_point" >/dev/null 2>&1 || true
+            rm -rf "$install_root" "$mount_point"
+          }
+          trap cleanup EXIT
+          hdiutil attach \
+            -readonly \
+            -nobrowse \
+            -mountpoint "$mount_point" \
+            "${packages[0]}"
+          ditto "$mount_point/MyHelp.app" "$install_root/MyHelp.app"
+          test -x "$install_root/MyHelp.app/Contents/MacOS/myhelp-desktop"
+          rm -rf "$install_root/MyHelp.app"
+          test ! -e "$install_root/MyHelp.app"
+      - name: Smoke NSIS install and removal
+        if: matrix.bundle == 'nsis'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $packages = @(
+            Get-ChildItem `
+              "src-tauri/target/release/bundle/nsis" `
+              -Filter "*-setup.exe" `
+              -File
+          )
+          if ($packages.Count -ne 1) {
+            throw "Expected exactly one NSIS installer, found $($packages.Count)"
+          }
+          $installDir = Join-Path $env:RUNNER_TEMP "myhelp-nsis-install"
+          Remove-Item -Recurse -Force $installDir -ErrorAction SilentlyContinue
+          $install = Start-Process `
+            -FilePath $packages[0].FullName `
+            -ArgumentList @("/S", "/D=$installDir") `
+            -Wait `
+            -PassThru
+          if ($install.ExitCode -ne 0) {
+            throw "NSIS installer failed with exit code $($install.ExitCode)"
+          }
+          $binary = Join-Path $installDir "myhelp-desktop.exe"
+          $uninstaller = Join-Path $installDir "uninstall.exe"
+          if (!(Test-Path -PathType Leaf $binary)) {
+            throw "Installed desktop binary is missing: $binary"
+          }
+          if (!(Test-Path -PathType Leaf $uninstaller)) {
+            throw "NSIS uninstaller is missing: $uninstaller"
+          }
+          $uninstall = Start-Process `
+            -FilePath $uninstaller `
+            -ArgumentList "/S" `
+            -Wait `
+            -PassThru
+          if ($uninstall.ExitCode -ne 0) {
+            throw "NSIS uninstaller failed with exit code $($uninstall.ExitCode)"
+          }
+          for ($attempt = 0; $attempt -lt 20; $attempt++) {
+            if (!(Test-Path $binary) -and !(Test-Path $uninstaller)) {
+              break
+            }
+            Start-Sleep -Milliseconds 250
+          }
+          if ((Test-Path $binary) -or (Test-Path $uninstaller)) {
+            throw "NSIS uninstall left application files behind"
+          }
+      - name: Normalize tested desktop bundle
+        env:
+          BUNDLE: ${{ matrix.bundle }}
+          TARGET: ${{ matrix.target }}
+          VERSION: ${{ needs.release-contract.outputs.version }}
+        run: |
+          node scripts/release.mjs stage-desktop \
+            "$VERSION" \
+            "$TARGET" \
+            "$BUNDLE" \
+            "src-tauri/target/release/bundle/$BUNDLE" \
+            release-assets
+      - name: Upload tested unsigned desktop bundle
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: myhelp-${{ runner.os }}-${{ runner.arch }}-${{ matrix.bundle }}
-          path: ${{ matrix.artifact_path }}
+          name: release-desktop-${{ matrix.target }}
+          path: release-assets/myhelp-desktop-${{ matrix.target }}-v${{ needs.release-contract.outputs.version }}-${{ matrix.bundle }}-unsigned.${{ matrix.bundle == 'nsis' && 'exe' || matrix.bundle }}
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
 
   brand-assets:
     name: Brand assets (${{ matrix.os }})
+    needs: release-contract
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -99,28 +292,224 @@ jobs:
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
           version: 10.34.5
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
-          cache: pnpm
+          package-manager-cache: false
       - run: pnpm install --frozen-lockfile
       - run: pnpm icons:check
 
   frontend:
-    name: Frontend
+    name: Frontend and release tooling
+    needs: release-contract
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
           version: 10.34.5
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
-          cache: pnpm
+          package-manager-cache: false
       - run: pnpm install --frozen-lockfile
+      - run: pnpm release:test
+      - run: pnpm release:check
       - run: pnpm test
       - run: pnpm build
+
+  nix:
+    name: Nix (${{ matrix.os }})
+    needs: release-contract
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+      - run: nix flake check --no-update-lock-file
+      - run: nix run .# -- --version
+
+  assemble:
+    name: Assemble and verify release assets
+    needs:
+      - release-contract
+      - rust
+      - desktop-rust
+      - brand-assets
+      - frontend
+      - nix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Generate pinned source SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: .
+          format: spdx-json
+          output-file: ${{ runner.temp }}/myhelp-source-v${{ needs.release-contract.outputs.version }}.spdx.json
+          syft-version: v1.48.0
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Download tested native candidates
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: release-*
+          path: release-ready
+          merge-multiple: true
+      - name: Finalize release contract
+        shell: bash
+        env:
+          VERSION: ${{ needs.release-contract.outputs.version }}
+        run: |
+          set -euo pipefail
+          cp \
+            "$RUNNER_TEMP/myhelp-source-v$VERSION.spdx.json" \
+            release-ready/
+          node scripts/release.mjs manifest \
+            "$VERSION" \
+            release-ready
+          node scripts/release.mjs verify \
+            "$VERSION" \
+            release-ready
+          node scripts/release.mjs notes \
+            "$VERSION" \
+            release-notes.md
+      - name: Upload complete release candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-assembled-v${{ needs.release-contract.outputs.version }}
+          path: |
+            release-ready
+            release-notes.md
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  attest:
+    name: Attest release assets
+    if: github.ref_type == 'tag'
+    needs:
+      - release-contract
+      - assemble
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: release-assembled-v${{ needs.release-contract.outputs.version }}
+          path: release-package
+      - env:
+          VERSION: ${{ needs.release-contract.outputs.version }}
+        run: >-
+          node scripts/release.mjs verify
+          "$VERSION"
+          release-package/release-ready
+      - name: Generate GitHub provenance
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4
+        with:
+          subject-path: release-package/release-ready/*
+
+  publish:
+    name: Publish verified prerelease
+    if: github.ref_type == 'tag'
+    needs:
+      - release-contract
+      - assemble
+      - attest
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      attestations: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: release-assembled-v${{ needs.release-contract.outputs.version }}
+          path: release-package
+      - name: Recheck downloaded candidate
+        env:
+          VERSION: ${{ needs.release-contract.outputs.version }}
+        run: >-
+          node scripts/release.mjs verify
+          "$VERSION"
+          release-package/release-ready
+      - name: Create and verify draft release
+        shell: bash
+        env:
+          VERSION: ${{ needs.release-contract.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" \
+            release-package/release-ready/* \
+            --draft \
+            --prerelease \
+            --verify-tag \
+            --title "MyHelp $GITHUB_REF_NAME" \
+            --notes-file release-package/release-notes.md
+          test "$(
+            gh release view "$GITHUB_REF_NAME" \
+              --json isDraft \
+              --jq .isDraft
+          )" = "true"
+          download_dir="$RUNNER_TEMP/myhelp-release-download"
+          mkdir "$download_dir"
+          gh release download "$GITHUB_REF_NAME" --dir "$download_dir"
+          node scripts/release.mjs verify \
+            "$VERSION" \
+            "$download_dir"
+          gh attestation verify \
+            "$download_dir/myhelp-cli-x86_64-unknown-linux-gnu-v$VERSION.tgz" \
+            --repo "$GITHUB_REPOSITORY"
+      - name: Publish prerelease
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release edit "$GITHUB_REF_NAME" --draft=false --prerelease
+          test "$(
+            gh release view "$GITHUB_REF_NAME" \
+              --json isDraft \
+              --jq .isDraft
+          )" = "false"
+          test "$(
+            gh release view "$GITHUB_REF_NAME" \
+              --json isPrerelease \
+              --jq .isPrerelease
+          )" = "true"

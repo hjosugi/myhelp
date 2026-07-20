@@ -1,13 +1,15 @@
 {
   "name": "myhelp",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.7.0",
   "packageManager": "pnpm@10.34.5",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "test": "vitest run",
+    "release:check": "node scripts/release.mjs validate",
+    "release:test": "node --test scripts/release.node-test.mjs",
     "icons": "node scripts/generate-icons.mjs",
     "icons:check": "node scripts/generate-icons.mjs --check",
     "preview": "vite preview",

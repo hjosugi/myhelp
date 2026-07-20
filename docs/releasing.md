@@ -73,12 +73,14 @@ prerelease while MyHelp is pre-1.0, and all expected assets are present.
 
 ## Repair or rollback
 
-Never retarget a published tag or replace an asset in place. If assembly fails
-before publication, inspect the unpublished draft, delete that draft without
-deleting or moving the tag, and rerun from the same tag after a workflow-only
-repair. The workflow deliberately refuses to overwrite an existing release.
-If a published release is bad, mark it clearly, direct users to the last
-known-good version, and issue a new patch release.
+Never retarget a tag or replace an asset in place. If assembly fails before
+publication, inspect and remove only the unpublished draft. Rerun the existing
+tag workflow only when the failure was transient and no source or workflow
+change is required. If a repair is required, leave the failed tag as evidence,
+make the repair on `main`, and issue a new patch version and tag. The workflow
+deliberately refuses to overwrite an existing release. If a published release
+is bad, mark it clearly, direct users to the last known-good version, and issue
+a new patch release.
 
 Desktop auto-update is not enabled. Reinstalling a prior release must not
 delete or rewrite the user's plaintext vault.

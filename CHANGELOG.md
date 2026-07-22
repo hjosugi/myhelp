@@ -10,6 +10,21 @@ MyHelp is still pre-1.0, so minor versions may change public behavior.
 
 ## [Unreleased]
 
+### Added
+
+- Add a versioned manifest, portable-path and safety-label checks, and
+  cross-platform CLI integration coverage for the language workflow starter
+  pack.
+- Document a machine-independent personal Nix overlay pattern and keep
+  framework-specific workflows in separate optional packs.
+
+### Fixed
+
+- Prevent `uv init` from downloading Python in the starter command by using
+  `--no-python-downloads`; `--no-pin-python` only controls `.python-version`.
+- Require dependency-update examples to tell readers to review generated
+  lockfile or module-file changes.
+
 ## [0.7.0] - 2026-07-19
 
 ### Added

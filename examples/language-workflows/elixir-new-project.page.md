@@ -19,6 +19,6 @@
 
 `mix format && mix format --check-formatted`
 
-- Update all dependencies allowed by `mix.exs`:
+- Update dependencies allowed by `mix.exs`, then review the `mix.lock` diff:
 
 `mix deps.update --all`

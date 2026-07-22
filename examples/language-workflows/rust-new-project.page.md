@@ -19,6 +19,6 @@
 
 `cargo fmt --all && cargo clippy --all-targets -- -D warnings`
 
-- Refresh versions allowed by `Cargo.toml`:
+- Refresh versions allowed by `Cargo.toml`, then review the lockfile diff:
 
 `cargo update`

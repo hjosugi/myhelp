@@ -10,6 +10,8 @@
     "test": "vitest run",
     "release:check": "node scripts/release.mjs validate",
     "release:test": "node --test scripts/release.node-test.mjs",
+    "workflows:check": "node scripts/language-workflows.mjs",
+    "workflows:test": "node --test scripts/language-workflows.node-test.mjs",
     "icons": "node scripts/generate-icons.mjs",
     "icons:check": "node scripts/generate-icons.mjs --check",
     "preview": "vite preview",

@@ -323,6 +323,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm release:test
       - run: pnpm release:check
+      - run: pnpm workflows:test
+      - run: pnpm workflows:check
       - run: pnpm test
       - run: pnpm build
 

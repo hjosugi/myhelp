@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "reviewedOn": "2026-07-22",
+  "pages": [
+    {
+      "file": "c-cpp-cmake-new-project.page.md",
+      "topic": "c-cpp-cmake-new-project",
+      "toolchain": "CMake 4.1.2",
+      "documentation": [
+        "https://cmake.org/cmake/help/latest/guide/tutorial/index.html"
+      ]
+    },
+    {
+      "file": "common-lisp-new-project.page.md",
+      "topic": "common-lisp-new-project",
+      "toolchain": "SBCL 2.6.5; Quicklisp distribution dated 2026-01-01",
+      "documentation": [
+        "https://www.quicklisp.org/beta/",
+        "https://www.quicklisp.org/beta/UNOFFICIAL/docs/quickproject/readme.html"
+      ]
+    },
+    {
+      "file": "elixir-new-project.page.md",
+      "topic": "elixir-new-project",
+      "toolchain": "Elixir 1.18.4",
+      "documentation": [
+        "https://hexdocs.pm/mix/Mix.Tasks.New.html"
+      ]
+    },
+    {
+      "file": "gleam-new-project.page.md",
+      "topic": "gleam-new-project",
+      "toolchain": "Gleam 1.17.0",
+      "documentation": [
+        "https://gleam.run/writing-gleam/"
+      ]
+    },
+    {
+      "file": "go-new-project.page.md",
+      "topic": "go-new-project",
+      "toolchain": "Go 1.26.4",
+      "documentation": [
+        "https://go.dev/doc/tutorial/create-module"
+      ]
+    },
+    {
+      "file": "haskell-new-project.page.md",
+      "topic": "haskell-new-project",
+      "toolchain": "cabal-install 3.16.1.0",
+      "documentation": [
+        "https://cabal.readthedocs.io/en/stable/getting-started.html"
+      ]
+    },
+    {
+      "file": "java-maven-new-project.page.md",
+      "topic": "java-maven-new-project",
+      "toolchain": "OpenJDK 21.0.12; Maven 3.9.16",
+      "documentation": [
+        "https://maven.apache.org/guides/getting-started/index.html"
+      ]
+    },
+    {
+      "file": "lua-new-project.page.md",
+      "topic": "lua-new-project",
+      "toolchain": "Lua 5.4.7",
+      "documentation": [
+        "https://www.lua.org/start.html",
+        "https://www.lua.org/manual/"
+      ]
+    },
+    {
+      "file": "python-new-project.page.md",
+      "topic": "python-new-project",
+      "toolchain": "uv 0.11.28",
+      "documentation": [
+        "https://docs.astral.sh/uv/concepts/projects/init/",
+        "https://docs.astral.sh/uv/reference/cli/#uv-init"
+      ]
+    },
+    {
+      "file": "ruby-new-project.page.md",
+      "topic": "ruby-new-project",
+      "toolchain": "Ruby 3.4.9; Bundler 2.7.2",
+      "documentation": [
+        "https://bundler.io/guides/creating_gem.html"
+      ]
+    },
+    {
+      "file": "rust-new-project.page.md",
+      "topic": "rust-new-project",
+      "toolchain": "Rust 1.96.1 (edition 2024)",
+      "documentation": [
+        "https://doc.rust-lang.org/cargo/guide/creating-a-new-project.html"
+      ]
+    },
+    {
+      "file": "typescript-new-project.page.md",
+      "topic": "typescript-new-project",
+      "toolchain": "Node.js 24.18.0; pnpm 11.15.0; TypeScript 5.9.3",
+      "documentation": [
+        "https://pnpm.io/cli/init",
+        "https://www.typescriptlang.org/docs/handbook/compiler-options.html"
+      ]
+    },
+    {
+      "file": "zig-new-project.page.md",
+      "topic": "zig-new-project",
+      "toolchain": "Zig 0.16.0",
+      "documentation": [
+        "https://ziglang.org/learn/build-system/"
+      ]
+    }
+  ]
+}

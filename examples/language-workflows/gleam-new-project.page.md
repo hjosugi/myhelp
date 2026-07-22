@@ -19,6 +19,6 @@
 
 `gleam add {{package}}`
 
-- Resolve newer dependency versions:
+- Resolve newer dependency versions, then review the `manifest.toml` diff:
 
 `gleam update`

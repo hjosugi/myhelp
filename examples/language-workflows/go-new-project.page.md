@@ -15,6 +15,6 @@
 
 `gofmt -w . && go vet ./...`
 
-- Update direct and transitive dependencies, then clean the module files:
+- Update dependencies, tidy module files, then review both module-file diffs:
 
 `go get -u ./... && go mod tidy`

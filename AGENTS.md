@@ -49,6 +49,8 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D w
 pnpm icons:check
 pnpm release:test
 pnpm release:check
+pnpm workflows:test
+pnpm workflows:check
 pnpm test
 pnpm build
 ```

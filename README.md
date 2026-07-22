@@ -217,9 +217,13 @@ cargo run -p myhelp-cli -- \
 
 The pack currently covers Python, Go, Rust, Node.js/TypeScript, Java, Lua,
 Elixir, Gleam, Haskell, Zig, Ruby, Common Lisp, and C/C++. Every page links to
-the relevant official documentation. The examples are portable defaults; copy
-and customize them in your own vault rather than coupling the public project to
-one machine's dotfiles.
+the relevant official documentation and is checked through the real CLI on
+Linux, macOS, and Windows. The pack manifest records the reviewed toolchain
+snapshot, while CI rejects inventory drift, machine-specific paths, and unsafe
+update wording. The examples are portable defaults; copy and customize them in
+your own vault rather than coupling the public project to one machine's
+dotfiles. See the
+[starter-pack maintenance contract](examples/language-workflows/README.md).
 
 ## File format
 

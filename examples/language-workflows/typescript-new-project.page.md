@@ -19,7 +19,7 @@
 
 `pnpm exec tsc --noEmit`
 
-- Update dependencies within declared ranges:
+- Update dependencies within declared ranges, then review the lockfile diff:
 
 `pnpm update`
 

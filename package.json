@@ -15,7 +15,9 @@
     "icons": "node scripts/generate-icons.mjs",
     "icons:check": "node scripts/generate-icons.mjs --check",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "graphify:setup": "sh scripts/graphify.sh setup",
+    "graphify:update": "sh scripts/graphify.sh update"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

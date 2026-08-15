@@ -168,6 +168,11 @@ pub fn validate_tldr_page(content: &str, expected_topic: Option<&str>) -> TldrVa
     let mut description_count = 0_usize;
     let mut example_count = 0_usize;
     let mut awaiting_command: Option<usize> = None;
+    // Set once an example description has been given its first command, and
+    // cleared by the next line that is not another command. While it is set,
+    // further commands are alternative spellings of the same example rather
+    // than commands that lost their description.
+    let mut example_open = false;
     let mut examples_started = false;
 
     for (index, line) in lines.iter().enumerate().skip(first_nonempty + 1) {
@@ -185,6 +190,7 @@ pub fn validate_tldr_page(content: &str, expected_topic: Option<&str>) -> TldrVa
                     &mut diagnostics,
                 );
                 awaiting_command = None;
+                example_open = true;
                 continue;
             }
             error(
@@ -199,6 +205,7 @@ pub fn validate_tldr_page(content: &str, expected_topic: Option<&str>) -> TldrVa
         }
 
         if let Some(description) = line.strip_prefix("> ") {
+            example_open = false;
             if examples_started {
                 error(
                     &mut diagnostics,
@@ -218,6 +225,7 @@ pub fn validate_tldr_page(content: &str, expected_topic: Option<&str>) -> TldrVa
             description_count += 1;
         } else if let Some(description) = line.strip_prefix("- ") {
             examples_started = true;
+            example_open = false;
             if description.trim().is_empty() {
                 error(
                     &mut diagnostics,
@@ -235,18 +243,28 @@ pub fn validate_tldr_page(content: &str, expected_topic: Option<&str>) -> TldrVa
             }
             awaiting_command = Some(line_number);
         } else if is_command_line(line) {
-            error(
-                &mut diagnostics,
-                line_number,
-                "command-without-description",
-                "each command must follow a `- <description>:` line",
-            );
+            // An example may list several commands under one description --
+            // alternative spellings, or the two halves of a shell pipeline the
+            // author wants shown apart. tealdeer renders them, so rejecting
+            // them here would make MyHelp stricter than the client the pages
+            // are written for. Only a command with no description above it at
+            // all is an error. Such an example still counts once, because the
+            // tldr style guide counts description-and-command pairs.
+            if !example_open {
+                error(
+                    &mut diagnostics,
+                    line_number,
+                    "command-without-description",
+                    "each command must follow a `- <description>:` line",
+                );
+            }
             validate_placeholders(
                 command_body(line).expect("is_command_line checked the shape"),
                 line_number,
                 &mut diagnostics,
             );
         } else if line.starts_with('#') {
+            example_open = false;
             error(
                 &mut diagnostics,
                 line_number,
@@ -254,6 +272,7 @@ pub fn validate_tldr_page(content: &str, expected_topic: Option<&str>) -> TldrVa
                 "additional headings are outside the supported tldr subset",
             );
         } else {
+            example_open = false;
             error(
                 &mut diagnostics,
                 line_number,
@@ -995,6 +1014,51 @@ mod tests {
     fn validates_tldr_placeholder_edge_cases() {
         let page = "# Git\n\n> Work with repositories.\n\n- Inspect a stash:\n\n`git stash show {{stash@{0}}}`\n\n- Choose an option:\n\n`git add {{[-A|--all]}}`\n\n- Preserve template braces:\n\n`echo \\{\\{value\\}\\}`\n";
         let validation = validate_tldr_page(page, Some("git"));
+        assert!(validation.valid, "{:?}", validation.diagnostics);
+    }
+
+    #[test]
+    fn accepts_several_commands_under_one_example_description() {
+        let mut page =
+            String::from("# Task\n\n> Run maintenance.\n\n- Update one layer at a time:\n");
+        for index in 0..9 {
+            page.push_str(&format!("\n`task update:{index}`\n"));
+        }
+
+        let validation = validate_tldr_page(&page, Some("task"));
+        assert!(validation.valid, "{:?}", validation.diagnostics);
+        assert!(
+            !validation
+                .diagnostics
+                .iter()
+                .any(|item| item.code == "too-many-examples"),
+            "alternatives under one description are one example, not nine: {:?}",
+            validation.diagnostics
+        );
+    }
+
+    #[test]
+    fn rejects_a_command_with_no_example_description_above_it() {
+        let validation = validate_tldr_page(
+            "# Task\n\n> Run maintenance.\n\n`task update`\n\n- Update one layer:\n\n`task update:nix`\n",
+            Some("task"),
+        );
+        assert!(!validation.valid);
+        let offending: Vec<_> = validation
+            .diagnostics
+            .iter()
+            .filter(|item| item.code == "command-without-description")
+            .collect();
+        assert_eq!(offending.len(), 1, "{:?}", validation.diagnostics);
+        assert_eq!(offending[0].line, 5);
+    }
+
+    #[test]
+    fn an_example_block_ends_at_the_next_description() {
+        let validation = validate_tldr_page(
+            "# Task\n\n> Run maintenance.\n\n- Update one layer:\n\n`task update:nix`\n\n`task update:uv`\n\n- Check the layout:\n\n`task doctor`\n",
+            Some("task"),
+        );
         assert!(validation.valid, "{:?}", validation.diagnostics);
     }
 

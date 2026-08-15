@@ -22,6 +22,22 @@ The initial content conventions follow tldr pages:
 `command --option {{placeholder}}`
 ```
 
+An example description may be followed by more than one command when they are
+alternative spellings of the same action, or two halves of a workflow that read
+better apart:
+
+```markdown
+- Update one layer at a time:
+
+`task update:nix`
+
+`task update:rust`
+```
+
+tealdeer renders these, so validation accepts them and counts the block as a
+single example. A command with no example description above it at all is still
+reported as `command-without-description`.
+
 ## Compatibility levels
 
 - A flat `git.page.md` file is intended to be directly readable as a tealdeer

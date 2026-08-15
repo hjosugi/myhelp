@@ -20,6 +20,11 @@ MyHelp is still pre-1.0, so minor versions may change public behavior.
 
 ### Fixed
 
+- Accept several commands under one example description in
+  `myhelp tldr validate`. tealdeer renders them, so rejecting them made
+  validation stricter than the client the pages are written for. Such a block
+  counts as one example rather than one per command; a command with no
+  description above it at all is still reported.
 - Prevent `uv init` from downloading Python in the starter command by using
   `--no-python-downloads`; `--no-pin-python` only controls `.python-version`.
 - Require dependency-update examples to tell readers to review generated

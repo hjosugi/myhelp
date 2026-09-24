@@ -64,7 +64,7 @@ No page content is uploaded, and the MVP does not execute saved commands.
 
 ## Install the CLI
 
-MyHelp v0.7.0 publishes tested CLI archives for Linux x64, macOS Apple Silicon,
+MyHelp v0.8.0 publishes tested CLI archives for Linux x64, macOS Apple Silicon,
 and Windows x64. Each release includes `SHA256SUMS`, an SPDX source SBOM, and
 GitHub provenance. Archive contents and removal are smoke-tested on the
 matching native runner before publication.
@@ -72,8 +72,8 @@ matching native runner before publication.
 The Nix app remains the shortest source-build path on Linux and macOS:
 
 ```bash
-nix run github:hjosugi/myhelp/v0.7.0 -- --version
-nix run github:hjosugi/myhelp/v0.7.0 -- list
+nix run github:hjosugi/myhelp/v0.8.0 -- --version
+nix run github:hjosugi/myhelp/v0.8.0 -- list
 ```
 
 Cargo can install the immutable release tag:
@@ -81,7 +81,7 @@ Cargo can install the immutable release tag:
 ```bash
 cargo install \
   --git https://github.com/hjosugi/myhelp \
-  --tag v0.7.0 \
+  --tag v0.8.0 \
   --locked \
   myhelp-cli
 cargo uninstall myhelp-cli

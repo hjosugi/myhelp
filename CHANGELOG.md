@@ -10,6 +10,8 @@ MyHelp is still pre-1.0, so minor versions may change public behavior.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-24
+
 ### Added
 
 - Add a versioned manifest, portable-path and safety-label checks, and
@@ -17,6 +19,13 @@ MyHelp is still pre-1.0, so minor versions may change public behavior.
   pack.
 - Document a machine-independent personal Nix overlay pattern and keep
   framework-specific workflows in separate optional packs.
+
+### Changed
+
+- Run the frontend test suite on Vitest 5, which requires Node.js 22 or newer
+  for development. Release assets and runtime behavior are unchanged.
+- Move the transitive undici and postcss development dependencies to patched
+  releases.
 
 ### Fixed
 
@@ -29,6 +38,12 @@ MyHelp is still pre-1.0, so minor versions may change public behavior.
   `--no-python-downloads`; `--no-pin-python` only controls `.python-version`.
 - Require dependency-update examples to tell readers to review generated
   lockfile or module-file changes.
+
+### Distribution status
+
+This is a prerelease. Distribution channels are unchanged from 0.7.0: tested
+CLI archives are the binary download channel, and native desktop bundles remain
+explicitly unsigned evaluation artifacts.
 
 ## [0.7.0] - 2026-07-19
 
@@ -140,7 +155,8 @@ advertised desktop installation channel.
 - Add the initial local-first Rust core, CLI, Tauri desktop scaffold, Nix
   development environment, and plaintext format contract.
 
-[Unreleased]: https://github.com/hjosugi/myhelp/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/hjosugi/myhelp/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/hjosugi/myhelp/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/hjosugi/myhelp/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/hjosugi/myhelp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/hjosugi/myhelp/compare/v0.4.0...v0.5.0

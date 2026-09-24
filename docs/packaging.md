@@ -85,10 +85,10 @@ On Linux, verify and install the x64 archive from its download directory:
 
 ```bash
 sha256sum --check SHA256SUMS --ignore-missing
-tar -xzf myhelp-cli-x86_64-unknown-linux-gnu-v0.7.0.tgz
+tar -xzf myhelp-cli-x86_64-unknown-linux-gnu-v0.8.0.tgz
 mkdir -p "$HOME/.local/bin"
 install -m 0755 \
-  myhelp-cli-x86_64-unknown-linux-gnu-v0.7.0/myhelp \
+  myhelp-cli-x86_64-unknown-linux-gnu-v0.8.0/myhelp \
   "$HOME/.local/bin/myhelp"
 myhelp --version
 ```
@@ -97,12 +97,12 @@ On macOS Apple Silicon, use the platform checksum command and the corresponding
 archive:
 
 ```bash
-archive=myhelp-cli-aarch64-apple-darwin-v0.7.0.tgz
+archive=myhelp-cli-aarch64-apple-darwin-v0.8.0.tgz
 grep -F "  $archive" SHA256SUMS | shasum -a 256 --check
 tar -xzf "$archive"
 mkdir -p "$HOME/.local/bin"
 install -m 0755 \
-  myhelp-cli-aarch64-apple-darwin-v0.7.0/myhelp \
+  myhelp-cli-aarch64-apple-darwin-v0.8.0/myhelp \
   "$HOME/.local/bin/myhelp"
 myhelp --version
 ```
@@ -111,7 +111,7 @@ On Windows x64, PowerShell can verify and extract the `.tgz` without a
 third-party archive tool:
 
 ```powershell
-$archive = "myhelp-cli-x86_64-pc-windows-msvc-v0.7.0.tgz"
+$archive = "myhelp-cli-x86_64-pc-windows-msvc-v0.8.0.tgz"
 $expected = (
   Select-String -Path SHA256SUMS -Pattern "  $([regex]::Escape($archive))$"
 ).Line.Split()[0]
@@ -120,7 +120,7 @@ if ($actual -ne $expected) { throw "SHA-256 mismatch for $archive" }
 tar.exe -xzf $archive
 New-Item -ItemType Directory -Force "$HOME\bin" | Out-Null
 Copy-Item `
-  "myhelp-cli-x86_64-pc-windows-msvc-v0.7.0\myhelp.exe" `
+  "myhelp-cli-x86_64-pc-windows-msvc-v0.8.0\myhelp.exe" `
   "$HOME\bin\myhelp.exe"
 & "$HOME\bin\myhelp.exe" --version
 ```
@@ -141,7 +141,7 @@ Provenance is an additional check:
 
 ```bash
 gh attestation verify \
-  myhelp-cli-x86_64-unknown-linux-gnu-v0.7.0.tgz \
+  myhelp-cli-x86_64-unknown-linux-gnu-v0.8.0.tgz \
   --repo hjosugi/myhelp
 ```
 
@@ -152,7 +152,7 @@ Cargo can build the CLI from the immutable release tag:
 ```bash
 cargo install \
   --git https://github.com/hjosugi/myhelp \
-  --tag v0.7.0 \
+  --tag v0.8.0 \
   --locked \
   myhelp-cli
 myhelp --version
@@ -166,8 +166,8 @@ crate metadata and test minisign verification without a signature bypass.
 The Nix Flake remains a no-persistent-install path:
 
 ```bash
-nix run github:hjosugi/myhelp/v0.7.0 -- --version
-nix run github:hjosugi/myhelp/v0.7.0 -- list
+nix run github:hjosugi/myhelp/v0.8.0 -- --version
+nix run github:hjosugi/myhelp/v0.8.0 -- list
 ```
 
 Change the versioned reference to update. `nix run` does not place a MyHelp
@@ -214,12 +214,12 @@ Create and exercise the current CLI archive using the same contract script:
 ```bash
 nix develop --command cargo build -p myhelp-cli --release --locked
 node scripts/release.mjs stage-cli \
-  0.7.0 \
+  0.8.0 \
   x86_64-unknown-linux-gnu \
   target/release/myhelp \
   release-assets
 node scripts/release.mjs smoke-cli \
-  release-assets/myhelp-cli-x86_64-unknown-linux-gnu-v0.7.0.tgz \
+  release-assets/myhelp-cli-x86_64-unknown-linux-gnu-v0.8.0.tgz \
   x86_64-unknown-linux-gnu
 ```
 

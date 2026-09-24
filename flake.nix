@@ -54,6 +54,9 @@
               "-p"
               "myhelp-cli"
             ];
+            # The opt-in Git sync tests drive the installed git executable
+            # against temporary local repositories.
+            nativeCheckInputs = [ pkgs.git ];
 
             meta = {
               description = "Create, search, and read personal help pages";

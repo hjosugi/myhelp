@@ -18,6 +18,25 @@ import {
   shortcutAction,
   ViewMode,
 } from "./editorActions";
+import {
+  CommandErrorLike,
+  Locale,
+  LOCALE_NAMES,
+  LocalePreference,
+  Message,
+  MessageKey,
+  Params,
+  SUPPORTED_LOCALES,
+  errorReason,
+  isLocalePreference,
+  loadLocalePreference,
+  render,
+  resolveLocale,
+  saveLocalePreference,
+  systemLanguages,
+  templateParts,
+  translate,
+} from "./i18n";
 import { MarkdownPreview } from "./MarkdownPreview";
 
 type PageSummary = {
@@ -70,6 +89,7 @@ type ModalState =
 type ModalProps = {
   children: ReactNode;
   description: string;
+  eyebrow: string;
   onCancel: () => void;
   title: string;
 };
@@ -100,24 +120,55 @@ function pageTitle(topic: string): string {
     .replace(/\b\w/g, (letter: string) => letter.toUpperCase());
 }
 
-function actionLabel(action: DeferredAction): string {
+function actionLabel(locale: Locale, action: DeferredAction): string {
   switch (action.kind) {
     case "open":
-      return `open ${action.topic}`;
+      return translate(locale, "action.open", { topic: action.topic });
     case "create":
-      return `create ${action.topic}`;
+      return translate(locale, "action.create", { topic: action.topic });
     case "rename":
-      return `rename this page to ${action.newTopic}`;
+      return translate(locale, "action.rename", { topic: action.newTopic });
     case "delete":
-      return "move this page to a recovery file";
+      return translate(locale, "action.delete");
     case "chooseVault":
-      return "switch vaults";
+      return translate(locale, "action.chooseVault");
     case "close":
-      return "close MyHelp";
+      return translate(locale, "action.close");
   }
 }
 
-function Modal({ children, description, onCancel, title }: ModalProps) {
+/** Renders a translated template, placing markup around named slots. */
+function RichText({
+  locale,
+  messageKey,
+  slots,
+}: {
+  locale: Locale;
+  messageKey: MessageKey;
+  slots: Record<string, ReactNode>;
+}) {
+  return (
+    <>
+      {templateParts(locale, messageKey).map((part, index) =>
+        "text" in part ? (
+          <span key={index}>{part.text}</span>
+        ) : (
+          <span key={index}>{slots[part.slot] ?? `{${part.slot}}`}</span>
+        ),
+      )}
+    </>
+  );
+}
+
+function statusMessage(
+  key: MessageKey,
+  params?: Params,
+  error?: CommandErrorLike,
+): Message {
+  return { key, params, error };
+}
+
+function Modal({ children, description, eyebrow, onCancel, title }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const previousFocusRef = useRef(
     typeof document === "undefined" ? null : (document.activeElement as HTMLElement | null),
@@ -170,7 +221,7 @@ function Modal({ children, description, onCancel, title }: ModalProps) {
         open
         ref={dialogRef}
       >
-        <p className="eyebrow">CONFIRM ACTION</p>
+        <p className="eyebrow">{eyebrow}</p>
         <h2 id="modal-title">{title}</h2>
         <p id="modal-description">{description}</p>
         {children}
@@ -188,9 +239,15 @@ function App() {
   const [newTopic, setNewTopic] = useState("");
   const [renameTopic, setRenameTopic] = useState("");
   const [vaultPath, setVaultPath] = useState("");
-  const [status, setStatus] = useState("Loading your help vault…");
+  const [status, setStatus] = useState<Message>({ key: "status.loading" });
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<CommandErrorLike | null>(null);
+  const [localePreference, setLocalePreference] = useState<LocalePreference>(() =>
+    loadLocalePreference(),
+  );
+  const [languages, setLanguages] = useState<readonly string[]>(() => systemLanguages());
+  const locale = resolveLocale(localePreference, languages);
+  const t = (key: MessageKey, params?: Params) => translate(locale, key, params);
   const [saving, setSaving] = useState(false);
   const [conflict, setConflict] = useState<Conflict | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
@@ -220,6 +277,22 @@ function App() {
   }, []);
 
   useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
+
+  useEffect(() => {
+    const updateLanguages = () => setLanguages(systemLanguages());
+    window.addEventListener("languagechange", updateLanguages);
+    return () => window.removeEventListener("languagechange", updateLanguages);
+  }, []);
+
+  function changeLocalePreference(value: string) {
+    if (!isLocalePreference(value)) return;
+    setLocalePreference(value);
+    saveLocalePreference(value);
+  }
+
+  useEffect(() => {
     let timeout: number | undefined;
     const scheduleReconcile = () => {
       window.clearTimeout(timeout);
@@ -229,7 +302,7 @@ function App() {
     const unlistenError = listen<{ message: string }>(
       "vault-watch-error",
       (event) => {
-        setStatus(`Vault watcher warning: ${event.payload.message}`);
+        setStatus(statusMessage("status.watcherWarning", { detail: event.payload.message }));
       },
     );
     window.addEventListener("focus", scheduleReconcile);
@@ -311,16 +384,16 @@ function App() {
       setPages(initialPages);
       setStatus(
         initialPages.length === 0
-          ? "Create your first help page."
-          : `${initialPages.length} page${initialPages.length === 1 ? "" : "s"}`,
+          ? { key: "status.firstPage" }
+          : { key: "status.pageCount", count: initialPages.length },
       );
       if (initialPages[0]) {
         await openPage(initialPages[0].topic);
       }
     } catch (error) {
-      const message = parseCommandError(error).message;
-      setLoadError(message);
-      setStatus(`Could not open the vault: ${message}`);
+      const commandError = parseCommandError(error);
+      setLoadError(commandError);
+      setStatus(statusMessage("status.openVaultFailed", {}, commandError));
     } finally {
       setLoading(false);
     }
@@ -336,7 +409,7 @@ function App() {
 
   async function refreshPages(search = query) {
     const nextPages = await loadPageList(search);
-    setStatus(`${nextPages.length} matching page${nextPages.length === 1 ? "" : "s"}`);
+    setStatus({ key: "status.matchCount", count: nextPages.length });
   }
 
   async function openPage(topic: string) {
@@ -345,10 +418,10 @@ function App() {
       setSelected(page);
       setDraft(page.content);
       setConflict(null);
-      setStatus(`Editing ${page.topic}`);
+      setStatus(statusMessage("status.editing", { topic: page.topic }));
       window.requestAnimationFrame(() => editorTextRef.current?.focus());
     } catch (error) {
-      setStatus(`Could not open ${topic}: ${parseCommandError(error).message}`);
+      setStatus(statusMessage("status.openFailed", { topic }, parseCommandError(error)));
     }
   }
 
@@ -366,7 +439,7 @@ function App() {
       setSelected(saved);
       setDraft(saved.content);
       await loadPageList(queryRef.current);
-      setStatus(`Saved ${saved.topic}`);
+      setStatus(statusMessage("status.saved", { topic: saved.topic }));
       return saved;
     } catch (error) {
       const commandError = parseCommandError(error);
@@ -377,9 +450,7 @@ function App() {
         } catch (readError) {
           if (parseCommandError(readError).kind !== "notFound") {
             setStatus(
-              `Conflict detected, but the disk version could not be read: ${
-                parseCommandError(readError).message
-              }`,
+              statusMessage("status.conflictUnreadable", {}, parseCommandError(readError)),
             );
           }
         }
@@ -389,11 +460,11 @@ function App() {
         });
         setStatus(
           commandError.draftPath
-            ? `Conflict: disk version kept; draft copied to ${commandError.draftPath}`
-            : `Conflict: ${commandError.message}`,
+            ? statusMessage("status.conflictDraftCopied", { path: commandError.draftPath })
+            : statusMessage("status.conflict", {}, commandError),
         );
       } else {
-        setStatus(`Could not save ${page.topic}: ${commandError.message}`);
+        setStatus(statusMessage("status.saveFailed", { topic: page.topic }, commandError));
       }
       return null;
     } finally {
@@ -403,7 +474,7 @@ function App() {
 
   function requestAction(action: DeferredAction) {
     if (editorRef.current.saving) {
-      setStatus("Wait for the current save to finish before changing pages.");
+      setStatus(statusMessage("status.waitForSave"));
       return;
     }
     if (needsUnsavedResolution(hasUnsavedWork, action)) {
@@ -430,11 +501,11 @@ function App() {
         setSelected(page);
         setDraft(page.content);
         setConflict(null);
-        setStatus(`Created ${page.topic}`);
+        setStatus(statusMessage("status.created", { topic: page.topic }));
         window.requestAnimationFrame(() => editorTextRef.current?.focus());
       } catch (error) {
         setStatus(
-          `Could not create ${action.topic}: ${parseCommandError(error).message}`,
+          statusMessage("status.createFailed", { topic: action.topic }, parseCommandError(error)),
         );
       }
       return;
@@ -443,7 +514,7 @@ function App() {
       try {
         const path = await invoke<string | null>("choose_vault");
         if (!path) {
-          setStatus("Vault selection cancelled.");
+          setStatus(statusMessage("status.vaultCancelled"));
           return;
         }
         setVaultPath(path);
@@ -453,9 +524,9 @@ function App() {
         setConflict(null);
         setLastDeleted(null);
         await initialize();
-        setStatus(`Opened vault ${path}`);
+        setStatus(statusMessage("status.vaultOpened", { path }));
       } catch (error) {
-        setStatus(`Could not switch vaults: ${parseCommandError(error).message}`);
+        setStatus(statusMessage("status.vaultSwitchFailed", {}, parseCommandError(error)));
       }
       return;
     }
@@ -463,14 +534,14 @@ function App() {
       try {
         await invoke("close_window");
       } catch (error) {
-        setStatus(`Could not close MyHelp: ${parseCommandError(error).message}`);
+        setStatus(statusMessage("status.closeFailed", {}, parseCommandError(error)));
       }
       return;
     }
 
     const page = basePage ?? editorRef.current.selected;
     if (!page) {
-      setStatus("The page is no longer available.");
+      setStatus(statusMessage("status.pageGone"));
       return;
     }
     if (action.kind === "rename") {
@@ -485,9 +556,11 @@ function App() {
         setConflict(null);
         setQuery("");
         await loadPageList("");
-        setStatus(`Renamed ${page.topic} to ${renamed.topic}`);
+        setStatus(statusMessage("status.renamed", { from: page.topic, to: renamed.topic }));
       } catch (error) {
-        setStatus(`Could not rename ${page.topic}: ${parseCommandError(error).message}`);
+        setStatus(
+          statusMessage("status.renameFailed", { topic: page.topic }, parseCommandError(error)),
+        );
       }
       return;
     }
@@ -502,9 +575,11 @@ function App() {
       setDraft("");
       setConflict(null);
       await loadPageList(queryRef.current);
-      setStatus(`Moved ${page.topic} to a recovery file. Undo is available.`);
+      setStatus(statusMessage("status.deleted", { topic: page.topic }));
     } catch (error) {
-      setStatus(`Could not delete ${page.topic}: ${parseCommandError(error).message}`);
+      setStatus(
+        statusMessage("status.deleteFailed", { topic: page.topic }, parseCommandError(error)),
+      );
     }
   }
 
@@ -516,7 +591,7 @@ function App() {
 
     if (saveFirst) {
       if (current.conflict) {
-        setStatus("Resolve the external change before saving.");
+        setStatus(statusMessage("status.resolveBeforeSaving"));
         setModal(null);
         return;
       }
@@ -529,7 +604,7 @@ function App() {
       current.conflict?.disk === null &&
       (action.kind === "rename" || action.kind === "delete")
     ) {
-      setStatus("The page was already deleted on disk; choose Restore or accept deletion.");
+      setStatus(statusMessage("status.alreadyDeleted"));
       setModal(null);
       return;
     }
@@ -554,10 +629,14 @@ function App() {
       setDraft(page.content);
       setQuery("");
       await loadPageList("");
-      setStatus(`Restored ${page.topic}`);
+      setStatus(statusMessage("status.restored", { topic: page.topic }));
     } catch (error) {
       setStatus(
-        `Could not restore ${lastDeleted.topic}: ${parseCommandError(error).message}`,
+        statusMessage(
+          "status.restoreFailed",
+          { topic: lastDeleted.topic },
+          parseCommandError(error),
+        ),
       );
     }
   }
@@ -572,7 +651,9 @@ function App() {
     } catch (error) {
       const commandError = parseCommandError(error);
       if (commandError.kind !== "notFound") {
-        setStatus(`Could not refresh ${before.selected.topic}: ${commandError.message}`);
+        setStatus(
+          statusMessage("status.refreshFailed", { topic: before.selected.topic }, commandError),
+        );
         return;
       }
       disk = null;
@@ -594,12 +675,12 @@ function App() {
         setSelected(disk);
         setDraft(disk.content);
         setConflict(null);
-        setStatus(`Reloaded external changes to ${disk.topic}`);
+        setStatus(statusMessage("status.reloaded", { topic: disk.topic }));
       } else {
         setSelected(null);
         setDraft("");
         setConflict(null);
-        setStatus(`${latest.selected.topic} was removed outside MyHelp`);
+        setStatus(statusMessage("status.removedOutside", { topic: latest.selected.topic }));
       }
       await loadPageList(queryRef.current);
       return;
@@ -622,17 +703,11 @@ function App() {
         content: latest.draft,
       });
     } catch (error) {
-      setStatus(
-        `External change detected; the draft is still open but could not be copied: ${
-          parseCommandError(error).message
-        }`,
-      );
+      setStatus(statusMessage("status.draftCopyFailed", {}, parseCommandError(error)));
     }
     setConflict({ disk, draftPath });
     if (draftPath) {
-      setStatus(
-        `External change detected; disk version kept and draft copied to ${draftPath}`,
-      );
+      setStatus(statusMessage("status.externalChange", { path: draftPath }));
     }
     await loadPageList(queryRef.current);
   }
@@ -641,7 +716,7 @@ function App() {
     if (!conflict?.disk) return;
     setSelected(conflict.disk);
     setConflict(null);
-    setStatus("Disk revision accepted as the save base. Review the draft, then save.");
+    setStatus(statusMessage("status.diskAccepted"));
     window.requestAnimationFrame(() => editorTextRef.current?.focus());
   }
 
@@ -650,11 +725,11 @@ function App() {
     if (conflict.disk) {
       setSelected(conflict.disk);
       setDraft(conflict.disk.content);
-      setStatus(`Loaded the disk version of ${conflict.disk.topic}`);
+      setStatus(statusMessage("status.loadedDisk", { topic: conflict.disk.topic }));
     } else {
       setSelected(null);
       setDraft("");
-      setStatus("Accepted the external deletion.");
+      setStatus(statusMessage("status.acceptedDeletion"));
     }
     setConflict(null);
     setModal(null);
@@ -680,9 +755,9 @@ function App() {
       setDraft(restored.content);
       setConflict(null);
       await loadPageList(queryRef.current);
-      setStatus(`Restored ${restored.topic} from the preserved draft`);
+      setStatus(statusMessage("status.restoredDraft", { topic: restored.topic }));
     } catch (error) {
-      setStatus(`Could not restore the page: ${parseCommandError(error).message}`);
+      setStatus(statusMessage("status.restorePageFailed", {}, parseCommandError(error)));
     }
   }
 
@@ -691,7 +766,7 @@ function App() {
     try {
       await refreshPages(query);
     } catch (error) {
-      setStatus(`Search failed: ${parseCommandError(error).message}`);
+      setStatus(statusMessage("status.searchFailed", {}, parseCommandError(error)));
     }
   }
 
@@ -726,25 +801,39 @@ function App() {
       inert={modal !== null ? true : undefined}
     >
       <a className="skip-link" href="#editor-workspace">
-        Skip to editor
+        {t("app.skipToEditor")}
       </a>
       <header className="topbar">
         <div>
-          <p className="eyebrow">LOCAL-FIRST HELP VAULT</p>
+          <p className="eyebrow">{t("app.eyebrow")}</p>
           <h1>MyHelp</h1>
         </div>
         <div className="topbar-actions">
           <span className="vault-path" title={vaultPath}>
-            {vaultPath || "Resolving vault…"}
+            {vaultPath || t("vault.resolving")}
           </span>
+          <label className="language-picker">
+            <span>{t("language.label")}</span>
+            <select
+              onChange={(event) => changeLocalePreference(event.currentTarget.value)}
+              value={localePreference}
+            >
+              <option value="system">{t("language.system")}</option>
+              {SUPPORTED_LOCALES.map((option) => (
+                <option key={option} lang={option} value={option}>
+                  {LOCALE_NAMES[option]}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
-            aria-label="Choose another vault"
+            aria-label={t("vault.chooseAnother")}
             className="secondary compact"
             disabled={loading}
             onClick={() => requestAction({ kind: "chooseVault" })}
             type="button"
           >
-            Choose vault
+            {t("vault.choose")}
           </button>
           <button
             aria-keyshortcuts="Control+S Meta+S"
@@ -754,42 +843,42 @@ function App() {
             type="button"
           >
             {saving
-              ? "Saving…"
+              ? t("save.saving")
               : conflict
-                ? "Resolve conflict"
+                ? t("save.resolveConflict")
                 : dirty
-                  ? "Save changes"
-                  : "Saved"}
+                  ? t("save.saveChanges")
+                  : t("save.saved")}
           </button>
         </div>
       </header>
 
       <div className="workspace">
-        <aside aria-label="Vault pages" className="sidebar">
+        <aside aria-label={t("sidebar.label")} className="sidebar">
           <form className="search" onSubmit={(event) => void search(event)}>
             <label htmlFor="search-pages">
-              Search pages <kbd>Ctrl/⌘ K</kbd>
+              {t("search.label")} <kbd>Ctrl/⌘ K</kbd>
             </label>
             <div className="input-row">
               <input
                 aria-keyshortcuts="Control+K Meta+K"
                 id="search-pages"
                 onChange={(event) => setQuery(event.currentTarget.value)}
-                placeholder="Python, Nix, Git…"
+                placeholder={t("search.placeholder")}
                 ref={searchRef}
                 value={query}
               />
-              <button type="submit">Search</button>
+              <button type="submit">{t("search.submit")}</button>
             </div>
           </form>
 
-          <nav aria-busy={loading} aria-label="Help pages" className="page-list">
+          <nav aria-busy={loading} aria-label={t("pages.label")} className="page-list">
             {loading ? (
-              <p className="empty">Loading pages…</p>
+              <p className="empty">{t("pages.loading")}</p>
             ) : (
               pages.map((page) => (
                 <button
-                  aria-label={`Open ${page.topic}`}
+                  aria-label={t("pages.open", { topic: page.topic })}
                   aria-current={selected?.topic === page.topic ? "page" : undefined}
                   className={selected?.topic === page.topic ? "page active" : "page"}
                   key={page.topic}
@@ -803,27 +892,25 @@ function App() {
             )}
             {!loading && pages.length === 0 && (
               <p className="empty">
-                {query.trim()
-                  ? "No pages match this search."
-                  : "No pages yet. Create one below."}
+                {query.trim() ? t("pages.noMatches") : t("pages.empty")}
               </p>
             )}
           </nav>
 
           <form className="new-page" onSubmit={createPage}>
             <label htmlFor="new-topic">
-              New page <kbd>Ctrl/⌘ N</kbd>
+              {t("newPage.label")} <kbd>Ctrl/⌘ N</kbd>
             </label>
             <input
               aria-keyshortcuts="Control+N Meta+N"
               id="new-topic"
               onChange={(event) => setNewTopic(event.currentTarget.value)}
-              placeholder="python/new-project"
+              placeholder={t("newPage.placeholder")}
               ref={newTopicRef}
               value={newTopic}
             />
             <button className="secondary" type="submit" disabled={!newTopic.trim()}>
-              Create page
+              {t("newPage.submit")}
             </button>
           </form>
         </aside>
@@ -836,18 +923,18 @@ function App() {
         >
           {loadError ? (
             <div className="state-card" role="alert">
-              <p className="eyebrow">VAULT UNAVAILABLE</p>
-              <h2>MyHelp could not open this vault.</h2>
-              <p>{loadError}</p>
+              <p className="eyebrow">{t("vaultError.eyebrow")}</p>
+              <h2>{t("vaultError.title")}</h2>
+              <p>{errorReason(locale, loadError)}</p>
               <div className="button-row">
                 <button className="primary" onClick={() => void initialize()}>
-                  Retry
+                  {t("vaultError.retry")}
                 </button>
                 <button
                   className="secondary"
                   onClick={() => requestAction({ kind: "chooseVault" })}
                 >
-                  Choose another vault
+                  {t("vault.chooseAnother")}
                 </button>
               </div>
             </div>
@@ -855,20 +942,20 @@ function App() {
             <>
               <div className="document-heading">
                 <div>
-                  <p className="eyebrow">TOPIC</p>
+                  <p className="eyebrow">{t("document.eyebrow")}</p>
                   <h2>{selected.topic}</h2>
                 </div>
                 <div className="document-actions">
-                  {dirty && <span className="unsaved">Unsaved</span>}
+                  {dirty && <span className="unsaved">{t("document.unsaved")}</span>}
                   <button className="secondary compact" onClick={startRename} type="button">
-                    Rename
+                    {t("document.rename")}
                   </button>
                   <button
                     className="danger compact"
                     onClick={() => setModal({ kind: "delete" })}
                     type="button"
                   >
-                    Delete
+                    {t("document.delete")}
                   </button>
                 </div>
               </div>
@@ -876,22 +963,21 @@ function App() {
               {conflict && (
                 <section className="conflict-banner" role="alert">
                   <div>
-                    <p className="eyebrow">EXTERNAL CHANGE</p>
+                    <p className="eyebrow">{t("conflict.eyebrow")}</p>
                     <h3>
                       {conflict.disk
-                        ? "This page changed on disk."
-                        : "This page was deleted on disk."}
+                        ? t("conflict.changedTitle")
+                        : t("conflict.deletedTitle")}
                     </h3>
                     <p>
-                      The disk version was not overwritten. Your current draft remains
-                      in the editor
                       {conflict.draftPath ? (
-                        <>
-                          {" "}
-                          and is also saved at <code>{conflict.draftPath}</code>
-                        </>
+                        <RichText
+                          locale={locale}
+                          messageKey="conflict.bodyWithDraft"
+                          slots={{ path: <code>{conflict.draftPath}</code> }}
+                        />
                       ) : (
-                        "."
+                        t("conflict.body")
                       )}
                     </p>
                   </div>
@@ -903,14 +989,14 @@ function App() {
                           onClick={useDiskAsSaveBase}
                           type="button"
                         >
-                          Reconcile and save draft
+                          {t("conflict.reconcile")}
                         </button>
                         <button
                           className="secondary"
                           onClick={loadDiskVersion}
                           type="button"
                         >
-                          Load disk version
+                          {t("conflict.loadDisk")}
                         </button>
                       </>
                     ) : (
@@ -920,28 +1006,28 @@ function App() {
                           onClick={() => void restoreDeletedDraft()}
                           type="button"
                         >
-                          Restore draft as page
+                          {t("conflict.restoreDraft")}
                         </button>
                         <button
                           className="secondary"
                           onClick={loadDiskVersion}
                           type="button"
                         >
-                          Accept deletion
+                          {t("conflict.acceptDeletion")}
                         </button>
                       </>
                     )}
                   </div>
                   {conflict.disk && (
                     <details>
-                      <summary>Review the disk version before reconciling</summary>
+                      <summary>{t("conflict.reviewDisk")}</summary>
                       <pre>{conflict.disk.content}</pre>
                     </details>
                   )}
                 </section>
               )}
 
-              <div className="view-switcher" role="group" aria-label="Editor view">
+              <div className="view-switcher" role="group" aria-label={t("view.label")}>
                 {(["edit", "split", "preview"] as const).map((mode) => (
                   <button
                     aria-pressed={viewMode === mode}
@@ -950,11 +1036,15 @@ function App() {
                     onClick={() => setViewMode(mode)}
                     type="button"
                   >
-                    {mode === "edit" ? "Editor" : mode === "split" ? "Split" : "Preview"}
+                    {mode === "edit"
+                      ? t("view.edit")
+                      : mode === "split"
+                        ? t("view.split")
+                        : t("view.preview")}
                   </button>
                 ))}
                 <span className="shortcut-hint">
-                  Cycle <kbd>Ctrl/⌘ ⇧ P</kbd>
+                  {t("view.cycle")} <kbd>Ctrl/⌘ ⇧ P</kbd>
                 </span>
               </div>
 
@@ -963,9 +1053,9 @@ function App() {
                 id="editor-panes"
               >
                 <section aria-hidden={!editorVisible} className="pane editor-pane">
-                  <h3>Markdown</h3>
+                  <h3>{t("pane.markdown")}</h3>
                   <textarea
-                    aria-label={`Edit ${selected.topic}`}
+                    aria-label={t("editor.label", { topic: selected.topic })}
                     ref={editorTextRef}
                     onChange={(event) => setDraft(event.currentTarget.value)}
                     spellCheck
@@ -974,7 +1064,7 @@ function App() {
                   />
                 </section>
                 <section aria-hidden={!previewVisible} className="pane preview">
-                  <h3>Preview</h3>
+                  <h3>{t("pane.preview")}</h3>
                   <article>
                     <MarkdownPreview source={draft} />
                   </article>
@@ -983,18 +1073,15 @@ function App() {
             </>
           ) : (
             <div className="welcome">
-              <p className="eyebrow">PLAIN MARKDOWN, EVERYWHERE</p>
-              <h2>Your commands should be one search away.</h2>
-              <p>
-                Create a page from the sidebar, then read the same file from the
-                desktop app, the CLI, or a tldr-compatible client.
-              </p>
+              <p className="eyebrow">{t("welcome.eyebrow")}</p>
+              <h2>{t("welcome.title")}</h2>
+              <p>{t("welcome.body")}</p>
               <button
                 className="primary"
                 onClick={() => newTopicRef.current?.focus()}
                 type="button"
               >
-                Create your first page
+                {t("welcome.create")}
               </button>
             </div>
           )}
@@ -1002,24 +1089,31 @@ function App() {
       </div>
 
       {lastDeleted && (
-        <aside className="undo-banner" aria-label="Deleted page recovery">
+        <aside className="undo-banner" aria-label={t("undo.label")}>
           <span>
-            <strong>{lastDeleted.topic}</strong> is in a readable recovery file.
+            <RichText
+              locale={locale}
+              messageKey="undo.message"
+              slots={{ topic: <strong>{lastDeleted.topic}</strong> }}
+            />
           </span>
           <button className="secondary compact" onClick={() => void undoDelete()}>
-            Undo delete
+            {t("undo.button")}
           </button>
         </aside>
       )}
       <div aria-atomic="true" aria-live="polite" className="statusbar" role="status">
-        {status}
+        {render(locale, status)}
       </div>
 
       {modal?.kind === "unsaved" && (
         <Modal
-          description={`You have work that has not been committed to the current page. Decide what to do before you ${actionLabel(modal.action)}.`}
+          description={t("unsaved.description", {
+            action: actionLabel(locale, modal.action),
+          })}
+          eyebrow={t("modal.eyebrow")}
           onCancel={() => setModal(null)}
-          title="Keep your current changes?"
+          title={t("unsaved.title")}
         >
           <div className="modal-actions">
             <button
@@ -1029,36 +1123,34 @@ function App() {
               onClick={() => void resolveUnsaved(true)}
               type="button"
             >
-              Save and continue
+              {t("unsaved.saveAndContinue")}
             </button>
             <button
               className="danger"
               onClick={() => void resolveUnsaved(false)}
               type="button"
             >
-              Discard draft and continue
+              {t("unsaved.discardAndContinue")}
             </button>
             <button className="secondary" onClick={() => setModal(null)} type="button">
-              Cancel
+              {t("common.cancel")}
             </button>
           </div>
           {conflict && (
-            <p className="modal-note">
-              Saving is unavailable until the external change is resolved. You can
-              cancel and use the conflict controls, or discard this draft.
-            </p>
+            <p className="modal-note">{t("unsaved.conflictNote")}</p>
           )}
         </Modal>
       )}
 
       {modal?.kind === "rename" && selected && (
         <Modal
-          description="The Markdown page and its optional metadata sidecar move together. An existing destination is never overwritten."
+          description={t("rename.description")}
+          eyebrow={t("modal.eyebrow")}
           onCancel={() => setModal(null)}
-          title={`Rename ${selected.topic}`}
+          title={t("rename.title", { topic: selected.topic })}
         >
           <form className="modal-form" onSubmit={submitRename}>
-            <label htmlFor="rename-topic">New topic</label>
+            <label htmlFor="rename-topic">{t("rename.label")}</label>
             <input
               data-autofocus
               id="rename-topic"
@@ -1071,10 +1163,10 @@ function App() {
                 disabled={!renameTopic.trim() || renameTopic.trim() === selected.topic}
                 type="submit"
               >
-                Rename page
+                {t("rename.submit")}
               </button>
               <button className="secondary" onClick={() => setModal(null)} type="button">
-                Cancel
+                {t("common.cancel")}
               </button>
             </div>
           </form>
@@ -1083,9 +1175,10 @@ function App() {
 
       {modal?.kind === "delete" && selected && (
         <Modal
-          description={`${selected.topic} will leave the page list, but MyHelp keeps a readable recovery Markdown file so you can undo the deletion.`}
+          description={t("delete.description", { topic: selected.topic })}
+          eyebrow={t("modal.eyebrow")}
           onCancel={() => setModal(null)}
-          title={`Delete ${selected.topic}?`}
+          title={t("delete.title", { topic: selected.topic })}
         >
           <div className="modal-actions">
             <button
@@ -1097,10 +1190,10 @@ function App() {
               }}
               type="button"
             >
-              Move to recovery file
+              {t("delete.confirm")}
             </button>
             <button className="secondary" onClick={() => setModal(null)} type="button">
-              Cancel
+              {t("common.cancel")}
             </button>
           </div>
         </Modal>
@@ -1108,9 +1201,10 @@ function App() {
 
       {modal?.kind === "discardConflict" && (
         <Modal
-          description="The draft could not be copied to disk. Loading the disk version now will permanently discard the only remaining in-memory copy."
+          description={t("discard.description")}
+          eyebrow={t("modal.eyebrow")}
           onCancel={() => setModal(null)}
-          title="Discard the in-memory draft?"
+          title={t("discard.title")}
         >
           <div className="modal-actions">
             <button
@@ -1119,10 +1213,10 @@ function App() {
               onClick={applyDiskVersion}
               type="button"
             >
-              Discard in-memory draft
+              {t("discard.confirm")}
             </button>
             <button className="secondary" onClick={() => setModal(null)} type="button">
-              Keep editing
+              {t("discard.keepEditing")}
             </button>
           </div>
         </Modal>

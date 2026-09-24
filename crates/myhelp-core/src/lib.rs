@@ -420,14 +420,19 @@ impl Vault {
                 max_bytes: MAX_SEARCH_QUERY_BYTES,
             });
         }
-        let query = query.to_lowercase();
+        let terms = search_terms(query);
         let mut matches = Vec::new();
 
         for summary in self.list()? {
             let page = self.read(&summary.topic)?;
-            if summary.topic.to_lowercase().contains(&query)
-                || summary.title.to_lowercase().contains(&query)
-                || page.content.to_lowercase().contains(&query)
+            let fields = [
+                fold_for_search(&summary.topic),
+                fold_for_search(&summary.title),
+                fold_for_search(&page.content),
+            ];
+            if terms
+                .iter()
+                .all(|term| fields.iter().any(|field| field.contains(term.as_str())))
             {
                 matches.push(summary);
             }
@@ -864,6 +869,30 @@ fn validate_recovery_token(token: &str) -> Result<()> {
     Ok(())
 }
 
+/// Splits a search query into terms on Unicode whitespace, including the
+/// ideographic space that Japanese input methods insert. A page matches when
+/// every term occurs in its topic, title, or content, so mixed-language
+/// queries such as `git ブランチ` do not require the words to be adjacent.
+fn search_terms(query: &str) -> Vec<String> {
+    query.split_whitespace().map(fold_for_search).collect()
+}
+
+/// Case-folds text and maps full-width ASCII (`Ｇｉｔ`, `３`) to its
+/// half-width form, so text typed through a Japanese input method matches
+/// ASCII page content. Kana, kanji, and other scripts are left unchanged.
+fn fold_for_search(text: &str) -> String {
+    text.chars()
+        .map(|character| match character {
+            '\u{FF01}'..='\u{FF5E}' => {
+                char::from_u32(u32::from(character) - 0xFEE0).unwrap_or(character)
+            }
+            '\u{3000}' => ' ',
+            _ => character,
+        })
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
 fn title_from_content(content: &str, fallback: &str) -> String {
     content
         .lines()
@@ -897,6 +926,41 @@ mod tests {
 
         let matches = vault.search("python").expect("search pages");
         assert_eq!(matches.len(), 1);
+    }
+
+    #[test]
+    fn search_matches_japanese_and_mixed_language_queries() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let vault = Vault::new(directory.path().join("vault"));
+        vault
+            .create_with_content(
+                "git/branch",
+                "# Git ブランチ\n\n> 作業用のブランチを作る。\n\n- 新しいブランチ:\n\n`git switch -c {{name}}`\n",
+            )
+            .expect("create Japanese page");
+        vault
+            .create_with_content("rust/cargo", "# Cargo\n\n> Rust のビルドツール。\n")
+            .expect("create mixed page");
+
+        let topics = |query: &str| {
+            vault
+                .search(query)
+                .expect("search pages")
+                .into_iter()
+                .map(|page| page.topic)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(topics("ブランチ"), ["git/branch"]);
+        assert_eq!(topics("ビルド"), ["rust/cargo"]);
+        // Terms may come from different languages and need not be adjacent.
+        assert_eq!(topics("switch ブランチ"), ["git/branch"]);
+        // The ideographic space from a Japanese input method separates terms.
+        assert_eq!(topics("rust\u{3000}ビルド"), ["rust/cargo"]);
+        // Full-width ASCII typed through an input method matches ASCII text.
+        assert_eq!(topics("ＧＩＴ"), ["git/branch"]);
+        assert_eq!(topics("ｃａｒｇｏ"), ["rust/cargo"]);
+        assert!(topics("ブランチ ビルド").is_empty());
+        assert_eq!(topics("  "), ["git/branch", "rust/cargo"]);
     }
 
     #[test]

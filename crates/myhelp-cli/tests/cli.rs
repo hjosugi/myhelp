@@ -324,3 +324,98 @@ fn navi_adapter_returns_a_machine_readable_failure_report() {
             .any(|diagnostic| diagnostic["code"] == "multiple-contexts")
     );
 }
+
+fn myhelp_in_locale(
+    arguments: &[&str],
+    pages: &std::path::Path,
+    environment: &[(&str, &str)],
+) -> Output {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_myhelp"));
+    for variable in ["MYHELP_LANG", "LC_ALL", "LC_MESSAGES", "LANG"] {
+        command.env_remove(variable);
+    }
+    command
+        .envs(environment.iter().copied())
+        .arg("--pages-dir")
+        .arg(pages)
+        .args(arguments)
+        .output()
+        .expect("run myhelp")
+}
+
+const LOCALE_ENVIRONMENTS: [&[(&str, &str)]; 4] = [
+    &[("MYHELP_LANG", "en")],
+    &[("MYHELP_LANG", "ja")],
+    &[("LANG", "ja_JP.UTF-8")],
+    &[("LC_ALL", "ja_JP.UTF-8"), ("MYHELP_LANG", "auto")],
+];
+
+#[test]
+fn machine_readable_output_is_identical_in_every_locale() {
+    let vault = fixture_vault();
+    let commands: [&[&str]; 9] = [
+        &["list"],
+        &["list", "--json"],
+        &["search", "systems", "--json"],
+        &["show", "git"],
+        &["show", "git", "--json"],
+        &["path"],
+        &["completions", "fish"],
+        &["completions", "zsh"],
+        &["--help"],
+    ];
+    for arguments in commands {
+        let outputs = LOCALE_ENVIRONMENTS
+            .map(|environment| myhelp_in_locale(arguments, vault.path(), environment));
+        for output in &outputs {
+            assert!(output.status.success(), "{arguments:?}: {output:?}");
+        }
+        for output in &outputs[1..] {
+            assert_eq!(output.stdout, outputs[0].stdout, "{arguments:?}");
+        }
+    }
+}
+
+#[test]
+fn errors_are_localized_on_stderr_with_locale_independent_exit_codes() {
+    let vault = fixture_vault();
+
+    let english = myhelp_in_locale(&["show", "missing"], vault.path(), &[("MYHELP_LANG", "en")]);
+    assert_eq!(english.status.code(), Some(3));
+    assert_eq!(
+        String::from_utf8(english.stderr).expect("UTF-8 stderr"),
+        "error: page does not exist: missing\n"
+    );
+
+    for environment in &LOCALE_ENVIRONMENTS[1..] {
+        let japanese = myhelp_in_locale(&["show", "missing"], vault.path(), environment);
+        assert_eq!(japanese.status.code(), Some(3), "{environment:?}");
+        assert!(japanese.stdout.is_empty());
+        assert_eq!(
+            String::from_utf8(japanese.stderr).expect("UTF-8 stderr"),
+            "エラー: ページが見つかりません（page does not exist: missing）\n",
+            "{environment:?}"
+        );
+    }
+
+    let invalid = myhelp_in_locale(
+        &["show", "../escape"],
+        vault.path(),
+        &[("MYHELP_LANG", "ja")],
+    );
+    assert_eq!(invalid.status.code(), Some(5));
+    assert!(
+        String::from_utf8_lossy(&invalid.stderr)
+            .starts_with("エラー: トピック名が正しくありません（")
+    );
+}
+
+#[test]
+fn c_locale_keeps_english_even_when_the_system_prefers_japanese() {
+    let vault = fixture_vault();
+    let output = myhelp_in_locale(&["show", "missing"], vault.path(), &[("LC_ALL", "C")]);
+    assert_eq!(
+        String::from_utf8(output.stderr).expect("UTF-8 stderr"),
+        "error: page does not exist: missing\n"
+    );
+}

@@ -109,6 +109,14 @@ draft path, and creates the process directly. It does not pass the value to
 `sh`, `cmd.exe`, or PowerShell. The temporary-draft and revision-conflict rules
 remain the same as the storage contract.
 
+## Language
+
+Error lines on stderr and the `pick` prompt follow `MYHELP_LANG` (`en`, `ja`,
+or `auto`), then `LC_ALL`, `LC_MESSAGES`, and `LANG`, then the operating-system
+language. A localized error keeps the original English detail in parentheses.
+Stdout, `--raw`, `--json`, `path`, completion scripts, `--help`, and exit codes
+are identical in every locale. See [localization](localization.md).
+
 ## Exit codes
 
 | Code | Meaning |

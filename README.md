@@ -159,6 +159,12 @@ invoking a shell. Completion setup, JSON output, pager behavior, shell
 integration, and stable exit codes are documented in the
 [CLI contract](docs/cli.md).
 
+The desktop editor and CLI messages are available in English and Japanese.
+The editor follows the operating-system language unless you pick one from its
+**Language** menu; the CLI follows `MYHELP_LANG`, then `LC_ALL`, `LC_MESSAGES`,
+and `LANG`, then the operating system. Page output, JSON, and exit codes are the
+same in every language. See [localization](docs/localization.md).
+
 The tldr adapter preserves imported page bytes, reports line-oriented
 diagnostics, and exports nested topics through a deterministic,
 case-insensitive collision-safe mapping without overwriting existing files.

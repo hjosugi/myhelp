@@ -59,6 +59,9 @@ Tauri adapters must not grow their own parser while it is pending.
   deterministic flat export reports.
 - Exposes foreign adapter inspection before vault discovery, so a dry run
   cannot create a vault as a side effect.
+- Localizes stderr error lines and the picker prompt from `MYHELP_LANG`, the
+  POSIX locale variables, or the operating-system language; stdout, JSON,
+  `--help`, completions, and exit codes are locale-independent.
 - Does not execute page commands.
 
 The stable output, pager, completion, editor, and exit-code rules are specified
@@ -82,6 +85,9 @@ in [`docs/cli.md`](cli.md). Adapter rules are specified in
 - If the native watcher cannot start, the adapter falls back to a two-second,
   content-aware polling watcher. Window focus and visibility changes also
   trigger revision checks.
+- UI strings come from typed English and Japanese catalogs in `src/i18n.ts`.
+  The locale follows the webview's OS language list unless the user picks one;
+  see [localization](localization.md).
 
 ### Cargo workspace boundary
 

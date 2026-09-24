@@ -1,4 +1,5 @@
 mod editor;
+pub mod i18n;
 mod output;
 
 use anyhow::{Context, Result};
@@ -215,6 +216,12 @@ pub(crate) enum CliFailure {
 }
 
 pub fn run(cli: Cli) -> Result<()> {
+    run_with_locale(cli, i18n::Locale::detect())
+}
+
+/// Runs a command with an explicit UI locale. The locale only changes
+/// human-facing prompts; command output and exit codes are locale-independent.
+pub fn run_with_locale(cli: Cli, locale: i18n::Locale) -> Result<()> {
     let terminal = TerminalContext::detect(cli.color);
     let command = cli.command.unwrap_or(Commands::List { json: false });
 
@@ -270,7 +277,14 @@ pub fn run(cli: Cli) -> Result<()> {
             query,
             print_topic,
             output,
-        } => pick_page(&vault, query.as_deref(), print_topic, output, terminal),
+        } => pick_page(
+            &vault,
+            query.as_deref(),
+            print_topic,
+            output,
+            terminal,
+            locale,
+        ),
         Commands::Tldr { command } => run_tldr(&vault, command),
         Commands::Adapter { .. } => unreachable!("handled before vault discovery"),
         Commands::Path => write_line(&vault.root().display().to_string()),
@@ -506,6 +520,7 @@ fn pick_page(
     print_topic: bool,
     output: PageOutputArgs,
     terminal: TerminalContext,
+    locale: i18n::Locale,
 ) -> Result<()> {
     if !terminal.can_prompt() {
         return Err(CliFailure::InteractiveRequired.into());
@@ -522,10 +537,10 @@ fn pick_page(
 
     let selected = if terminal.use_color {
         let theme = ColorfulTheme::default();
-        fuzzy_select(&theme, &labels, query)?
+        fuzzy_select(&theme, &labels, query, locale)?
     } else {
         let theme = SimpleTheme;
-        fuzzy_select(&theme, &labels, query)?
+        fuzzy_select(&theme, &labels, query, locale)?
     }
     .ok_or(CliFailure::Cancelled)?;
     let topic = &pages[selected].topic;
@@ -542,9 +557,10 @@ fn fuzzy_select(
     theme: &dyn dialoguer::theme::Theme,
     labels: &[String],
     query: Option<&str>,
+    locale: i18n::Locale,
 ) -> Result<Option<usize>> {
     let mut prompt = FuzzySelect::with_theme(theme)
-        .with_prompt("Page")
+        .with_prompt(locale.picker_prompt())
         .items(labels)
         .report(false)
         .vim_mode(true);

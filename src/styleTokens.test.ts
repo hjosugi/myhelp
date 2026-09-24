@@ -50,6 +50,20 @@ describe("design tokens", () => {
     expect(css).toContain("@media (forced-colors: active)");
   });
 
+  it("keeps Japanese text readable", () => {
+    const fontUi = css.slice(css.indexOf("--font-ui:"), css.indexOf("--font-display:"));
+    expect(fontUi).toMatch(/Hiragino Sans/);
+    expect(fontUi).toMatch(/Yu Gothic UI/);
+    expect(fontUi).toMatch(/Noto Sans CJK JP/);
+    expect(fontUi.indexOf("Inter")).toBeLessThan(fontUi.indexOf("Hiragino Sans"));
+
+    const japanese = css.slice(css.indexOf(":lang(ja) {"));
+    const block = japanese.slice(0, japanese.indexOf("}"));
+    expect(block).toContain("line-break: strict;");
+    expect(block).toContain("overflow-wrap: anywhere;");
+    expect(css).toMatch(/\.statusbar \{[^}]*overflow-wrap: anywhere;/);
+  });
+
   it("keeps semantic text pairs above WCAG AA normal-text contrast", () => {
     const rootEnd = css.indexOf("\n}");
     const light = palette(css.slice(css.indexOf(":root"), rootEnd));

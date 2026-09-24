@@ -10,6 +10,27 @@ MyHelp is still pre-1.0, so minor versions may change public behavior.
 
 ## [Unreleased]
 
+### Added
+
+- Add Japanese to the desktop editor. The editor follows the operating-system
+  language, and a **Language** menu overrides it. All labels, accessible names,
+  status messages, confirmations, conflict banners, and onboarding are
+  translated; storage errors show a translated label followed by the original
+  detail. Missing translations fall back to English.
+- Localize CLI error lines on stderr and the `pick` prompt from `MYHELP_LANG`,
+  `LC_ALL`, `LC_MESSAGES`, `LANG`, or the operating-system language. Stdout,
+  JSON, `--help`, completion scripts, and exit codes do not change with the
+  locale.
+- Document locale selection, fallback rules, Japanese typography, and a
+  translator guide in `docs/localization.md`.
+
+### Changed
+
+- Search now matches every whitespace-separated term anywhere in a page's
+  topic, title, or content instead of one exact phrase, treats the ideographic
+  space as a separator, and folds full-width ASCII, so mixed Japanese and
+  English queries such as `git ブランチ` find pages.
+
 ## [0.8.0] - 2026-09-24
 
 ### Added

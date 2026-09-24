@@ -59,6 +59,8 @@ Tauri adapters must not grow their own parser while it is pending.
   deterministic flat export reports.
 - Exposes foreign adapter inspection before vault discovery, so a dry run
   cannot create a vault as a side effect.
+- Runs opt-in Git sync commands through core's `sync` module, which invokes
+  the installed `git` directly and never handles credentials (ADR 0004).
 - Localizes stderr error lines and the picker prompt from `MYHELP_LANG`, the
   POSIX locale variables, or the operating-system language; stdout, JSON,
   `--help`, completions, and exit codes are locale-independent.

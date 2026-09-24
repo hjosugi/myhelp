@@ -8,6 +8,7 @@
 
 use crate::CliFailure;
 use myhelp_core::Error as CoreError;
+use myhelp_core::sync::SyncError;
 
 /// Explicit override: `en`, `ja`, or `auto` (the default).
 pub const LANGUAGE_VARIABLE: &str = "MYHELP_LANG";
@@ -129,6 +130,35 @@ fn japanese_message(error: &anyhow::Error) -> Option<String> {
                 CliFailure::AdapterConversionFailed(_) => {
                     "このアダプター変換はインポートに使えません"
                 }
+            }
+            .to_owned(),
+        );
+    }
+
+    if let Some(sync) = error
+        .chain()
+        .find_map(|cause| cause.downcast_ref::<SyncError>())
+    {
+        return Some(
+            match sync {
+                SyncError::GitUnavailable(_) => "Git を起動できませんでした",
+                SyncError::NotARepository(_) => "保管庫が Git の作業ツリーの中にありません",
+                SyncError::NotEnabled => {
+                    "この保管庫では Git 同期が有効ではありません。先に `myhelp sync enable` を実行してください"
+                }
+                SyncError::Conflicted(_) => "競合しているファイルを先に解決してください",
+                SyncError::OperationInProgress(_) => {
+                    "Git の操作が途中です。Git で完了するか中止してください"
+                }
+                SyncError::NothingToCommit => "コミットするページの変更はありません",
+                SyncError::Diverged => {
+                    "ローカルとリモートの履歴が分岐しています。マージコミットを作るには --merge を付けて再実行してください"
+                }
+                SyncError::PushRejected => {
+                    "リモートが push を拒否しました。先に pull してください（MyHelp は強制 push しません）"
+                }
+                SyncError::GitFailed { .. } => "Git のコマンドが失敗しました",
+                SyncError::Io(_) => "ファイルを読み書きできませんでした",
             }
             .to_owned(),
         );
@@ -267,6 +297,15 @@ mod tests {
         assert_eq!(
             error_line(&error, Locale::Ja),
             "エラー: トピック名が正しくありません（could not create the page: invalid topic: ../escape）"
+        );
+    }
+
+    #[test]
+    fn sync_errors_are_translated() {
+        let error = Error::new(myhelp_core::sync::SyncError::PushRejected);
+        assert_eq!(
+            error_line(&error, Locale::Ja),
+            "エラー: リモートが push を拒否しました。先に pull してください（MyHelp は強制 push しません）（the remote rejected the push; pull first (MyHelp never force-pushes)）"
         );
     }
 

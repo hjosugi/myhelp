@@ -419,3 +419,67 @@ fn c_locale_keeps_english_even_when_the_system_prefers_japanese() {
         "error: page does not exist: missing\n"
     );
 }
+
+fn myhelp_with_git_identity(arguments: &[&str], pages: &std::path::Path) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_myhelp"))
+        .env("MYHELP_LANG", "en")
+        .env("GIT_AUTHOR_NAME", "MyHelp Test")
+        .env("GIT_AUTHOR_EMAIL", "myhelp@example.invalid")
+        .env("GIT_COMMITTER_NAME", "MyHelp Test")
+        .env("GIT_COMMITTER_EMAIL", "myhelp@example.invalid")
+        .env("GIT_CONFIG_COUNT", "1")
+        .env("GIT_CONFIG_KEY_0", "commit.gpgsign")
+        .env("GIT_CONFIG_VALUE_0", "false")
+        .arg("--pages-dir")
+        .arg(pages)
+        .args(arguments)
+        .output()
+        .expect("run myhelp")
+}
+
+#[test]
+fn sync_is_opt_in_and_commits_through_the_installed_git() {
+    let vault = fixture_vault();
+    let text = |output: &Output| String::from_utf8_lossy(&output.stdout).into_owned();
+
+    let status = myhelp_with_git_identity(&["sync", "status"], vault.path());
+    assert!(status.status.success());
+    assert!(text(&status).contains("is not in a Git work tree"));
+
+    let refused = myhelp_with_git_identity(&["sync", "commit", "-m", "Pages"], vault.path());
+    assert_eq!(refused.status.code(), Some(5));
+    assert!(!vault.path().join(".git").exists());
+
+    let enabled = myhelp_with_git_identity(&["sync", "enable", "--init"], vault.path());
+    assert!(enabled.status.success(), "{enabled:?}");
+    assert!(text(&enabled).contains("new        git.page.md (commit with --include-new)"));
+
+    let without_new = myhelp_with_git_identity(&["sync", "commit", "-m", "Pages"], vault.path());
+    assert!(without_new.status.success());
+    assert_eq!(
+        text(&without_new),
+        "nothing to commit; 2 new page file(s) need --include-new\n"
+    );
+
+    let committed = myhelp_with_git_identity(
+        &["sync", "commit", "-m", "Pages", "--include-new"],
+        vault.path(),
+    );
+    assert!(committed.status.success(), "{committed:?}");
+    assert!(text(&committed).starts_with("committed git.page.md\ncommitted rust.page.md\ncommit "));
+
+    let json = myhelp_with_git_identity(&["sync", "status", "--json"], vault.path());
+    let report: Value = serde_json::from_slice(&json.stdout).expect("status JSON");
+    assert_eq!(report["enabled"], true);
+    assert_eq!(report["changes"].as_array().expect("changes").len(), 0);
+    assert_eq!(report["upstream"], Value::Null);
+
+    // Without an upstream the push fails in Git; MyHelp adds no force option.
+    let pushed = myhelp_with_git_identity(&["sync", "push"], vault.path());
+    assert_eq!(pushed.status.code(), Some(1));
+
+    let disabled = myhelp_with_git_identity(&["sync", "disable"], vault.path());
+    assert!(disabled.status.success());
+    let refused = myhelp_with_git_identity(&["sync", "push"], vault.path());
+    assert_eq!(refused.status.code(), Some(5));
+}

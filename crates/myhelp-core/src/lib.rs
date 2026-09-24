@@ -12,6 +12,7 @@ use walkdir::WalkDir;
 
 mod adapters;
 mod external;
+pub mod sync;
 mod tldr;
 pub use adapters::{
     AdapterCompatibility, AdapterConversionReport, AdapterDiagnostic, AdapterDiagnosticLevel,

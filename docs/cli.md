@@ -109,6 +109,23 @@ draft path, and creates the process directly. It does not pass the value to
 `sh`, `cmd.exe`, or PowerShell. The temporary-draft and revision-conflict rules
 remain the same as the storage contract.
 
+## Git sync
+
+`myhelp sync` is an optional, per-vault Git workflow that runs the installed
+`git` executable; see [ADR 0004](adr/0004-opt-in-git-vault-sync.md).
+
+| Command | Behavior |
+|---|---|
+| `sync status [--json]` | Branch, upstream, ahead/behind, operation in progress, and vault changes; read-only |
+| `sync enable [--init]` | Opt in via local `myhelp.sync`; `--init` creates a repository at the vault root |
+| `sync disable` | Remove the opt-in flag; history and files are untouched |
+| `sync commit -m <message> [--include-new]` | Commit tracked page changes; new pages only with `--include-new` |
+| `sync pull [--merge]` | Fast-forward only; `--merge` creates a merge commit and leaves conflicts in the files |
+| `sync push` | Plain `git push`; never forced |
+
+Conflicts, a merge in progress, diverged history, and a rejected push exit with
+code 4; an unopted or non-repository vault exits with code 5.
+
 ## Language
 
 Error lines on stderr and the `pick` prompt follow `MYHELP_LANG` (`en`, `ja`,

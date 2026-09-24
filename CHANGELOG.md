@@ -23,6 +23,11 @@ MyHelp is still pre-1.0, so minor versions may change public behavior.
   locale.
 - Document locale selection, fallback rules, Japanese typography, and a
   translator guide in `docs/localization.md`.
+- Add opt-in Git sync for a vault: `myhelp sync status|enable|disable|commit|
+  pull|push` runs the installed Git without handling credentials, commits new
+  pages only with `--include-new`, keeps conflict copies and recovery files out
+  of Git, and never force-pushes, rebases, or resolves conflicts. ADR 0004
+  records the credential, privacy, and conflict boundaries.
 
 ### Changed
 

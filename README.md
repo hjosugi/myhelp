@@ -159,6 +159,11 @@ invoking a shell. Completion setup, JSON output, pager behavior, shell
 integration, and stable exit codes are documented in the
 [CLI contract](docs/cli.md).
 
+`myhelp sync` offers an optional, per-vault Git workflow (status, commit, pull,
+push) through your installed Git. It is opt-in, never stores credentials, never
+force-pushes or rebases, and leaves conflicted files readable. See the
+[Git sync decision](docs/adr/0004-opt-in-git-vault-sync.md).
+
 The desktop editor and CLI messages are available in English and Japanese.
 The editor follows the operating-system language unless you pick one from its
 **Language** menu; the CLI follows `MYHELP_LANG`, then `LC_ALL`, `LC_MESSAGES`,

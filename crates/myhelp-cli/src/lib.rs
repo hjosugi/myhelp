@@ -9,7 +9,9 @@ use dialoguer::{FuzzySelect, theme::ColorfulTheme, theme::SimpleTheme};
 use myhelp_core::{
     AdapterCompatibility, AdapterConversionReport, AdapterDiagnostic, AdapterDiagnosticLevel,
     AdapterDisposition, Error as CoreError, TldrDiagnostic, TldrDiagnosticLevel, TldrImportOptions,
-    TldrSource, TldrValidation, Vault, inspect_navi_file, validate_tldr_file,
+    TldrSource, TldrValidation, Vault, inspect_navi_file,
+    sync::{GitSync, PullMode, SyncChangeKind, SyncError, SyncStatus},
+    validate_tldr_file,
 };
 use output::{TerminalContext, write_page, write_summaries};
 use serde::Serialize;
@@ -120,8 +122,49 @@ enum Commands {
         #[command(subcommand)]
         command: AdapterCommands,
     },
+    /// Inspect or use the optional, opt-in Git workflow for this vault.
+    Sync {
+        #[command(subcommand)]
+        command: SyncCommands,
+    },
     /// Print the active page directory.
     Path,
+}
+
+#[derive(Debug, Subcommand)]
+enum SyncCommands {
+    /// Show the branch, upstream, and page changes without changing anything.
+    Status {
+        /// Print the status report as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Opt this vault in to MyHelp's Git commands.
+    Enable {
+        /// Create a repository at the vault root if there is none.
+        #[arg(long)]
+        init: bool,
+    },
+    /// Opt this vault out; the repository and history are untouched.
+    Disable,
+    /// Commit page changes inside the vault.
+    Commit {
+        /// Commit message.
+        #[arg(short, long)]
+        message: String,
+        /// Also commit pages that Git does not track yet.
+        #[arg(long)]
+        include_new: bool,
+    },
+    /// Pull from the upstream branch without rebasing.
+    Pull {
+        /// Create a merge commit when histories diverged; conflicts are left
+        /// in the files for you to resolve.
+        #[arg(long)]
+        merge: bool,
+    },
+    /// Push the current branch. MyHelp never force-pushes.
+    Push,
 }
 
 #[derive(Debug, Subcommand)]
@@ -287,9 +330,117 @@ pub fn run_with_locale(cli: Cli, locale: i18n::Locale) -> Result<()> {
         ),
         Commands::Tldr { command } => run_tldr(&vault, command),
         Commands::Adapter { .. } => unreachable!("handled before vault discovery"),
+        Commands::Sync { command } => run_sync(&vault, command),
         Commands::Path => write_line(&vault.root().display().to_string()),
         Commands::Completions { .. } => unreachable!("handled before vault discovery"),
     }
+}
+
+fn run_sync(vault: &Vault, command: SyncCommands) -> Result<()> {
+    let sync = GitSync::new(vault.root());
+    match command {
+        SyncCommands::Status { json } => {
+            let status = sync.status()?;
+            if json {
+                write_json(&status)
+            } else {
+                write_sync_status(vault.root(), &status)
+            }
+        }
+        SyncCommands::Enable { init } => {
+            let status = sync.enable(init)?;
+            write_line("sync: enabled")?;
+            write_sync_status(vault.root(), &status)
+        }
+        SyncCommands::Disable => {
+            sync.disable()?;
+            write_line("sync: disabled")
+        }
+        SyncCommands::Commit {
+            message,
+            include_new,
+        } => match sync.commit(&message, include_new) {
+            Ok(commit) => {
+                for path in &commit.staged {
+                    write_line(&format!("committed {path}"))?;
+                }
+                write_line(&format!("commit {}", commit.commit))
+            }
+            Err(SyncError::NothingToCommit) => {
+                let status = sync.status()?;
+                let untracked = status
+                    .changes
+                    .iter()
+                    .filter(|change| change.kind == SyncChangeKind::Untracked)
+                    .count();
+                if untracked > 0 && !include_new {
+                    write_line(&format!(
+                        "nothing to commit; {untracked} new page file(s) need --include-new"
+                    ))
+                } else {
+                    write_line("nothing to commit")
+                }
+            }
+            Err(error) => Err(error.into()),
+        },
+        SyncCommands::Pull { merge } => {
+            let mode = if merge {
+                PullMode::Merge
+            } else {
+                PullMode::FastForwardOnly
+            };
+            let status = sync.pull(mode)?;
+            write_sync_status(vault.root(), &status)
+        }
+        SyncCommands::Push => {
+            let status = sync.push()?;
+            write_sync_status(vault.root(), &status)
+        }
+    }
+}
+
+fn write_sync_status(root: &Path, status: &SyncStatus) -> Result<()> {
+    let Some(repository) = &status.repository else {
+        return write_line(&format!(
+            "sync: {} is not in a Git work tree (run `myhelp sync enable --init`)",
+            root.display()
+        ));
+    };
+    write_line(&format!("repository: {}", repository.display()))?;
+    write_line(if status.enabled {
+        "sync: enabled"
+    } else {
+        "sync: disabled (run `myhelp sync enable`)"
+    })?;
+    let branch = status.branch.as_deref().unwrap_or("(detached)");
+    match &status.upstream {
+        Some(upstream) => write_line(&format!(
+            "branch: {branch} -> {upstream} (ahead {}, behind {})",
+            status.ahead, status.behind
+        ))?,
+        None => write_line(&format!("branch: {branch} (no upstream)"))?,
+    }
+    if let Some(operation) = status.operation {
+        write_line(&format!(
+            "{operation} in progress: finish or abort it with Git"
+        ))?;
+    }
+    if status.changes.is_empty() {
+        return write_line("changes: none");
+    }
+    write_line("changes:")?;
+    for change in &status.changes {
+        let (label, note) = match change.kind {
+            SyncChangeKind::Modified => ("modified", ""),
+            SyncChangeKind::Added => ("added", ""),
+            SyncChangeKind::Deleted => ("deleted", ""),
+            SyncChangeKind::Renamed => ("renamed", ""),
+            SyncChangeKind::Untracked => ("new", " (commit with --include-new)"),
+            SyncChangeKind::Conflicted => ("conflicted", " (resolve in the file, then with Git)"),
+        };
+        write_line(&format!("  {label:<10} {}{note}", change.path))?;
+    }
+    Ok(())
 }
 
 fn inspect_adapter(
@@ -601,6 +752,23 @@ pub fn exit_code(error: &anyhow::Error) -> u8 {
             CliFailure::TldrValidationFailed(_) | CliFailure::AdapterConversionFailed(_) => {
                 EXIT_INVALID_DATA
             }
+        };
+    }
+
+    if let Some(error) = error
+        .chain()
+        .find_map(|cause| cause.downcast_ref::<SyncError>())
+    {
+        return match error {
+            SyncError::Conflicted(_)
+            | SyncError::OperationInProgress(_)
+            | SyncError::Diverged
+            | SyncError::PushRejected => EXIT_CONFLICT,
+            SyncError::NotARepository(_) | SyncError::NotEnabled => EXIT_INVALID_DATA,
+            SyncError::NothingToCommit
+            | SyncError::GitUnavailable(_)
+            | SyncError::GitFailed { .. }
+            | SyncError::Io(_) => EXIT_RUNTIME,
         };
     }
 

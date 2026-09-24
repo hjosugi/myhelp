@@ -39,8 +39,9 @@
 
 ## Milestone 4: optional collaboration
 
-- Git-backed vault workflow.
-- Sync conflict UI.
+- Git-backed vault workflow. (CLI complete: opt-in `myhelp sync`, see
+  [ADR 0004](adr/0004-opt-in-git-vault-sync.md))
+- Sync conflict UI. (designed in ADR 0004; desktop surface pending)
 - Shareable help packs without a centralized proprietary service.
 
 Features move between milestones only after the associated GitHub issue records

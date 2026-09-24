@@ -10,6 +10,8 @@ MyHelp is still pre-1.0, so minor versions may change public behavior.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-25
+
 ### Added
 
 - Add Japanese to the desktop editor. The editor follows the operating-system
@@ -35,6 +37,13 @@ MyHelp is still pre-1.0, so minor versions may change public behavior.
   topic, title, or content instead of one exact phrase, treats the ideographic
   space as a separator, and folds full-width ASCII, so mixed Japanese and
   English queries such as `git ブランチ` find pages.
+
+### Distribution status
+
+This is a prerelease. Distribution channels are unchanged from 0.8.0: tested
+CLI archives are the binary download channel, and native desktop bundles remain
+explicitly unsigned evaluation artifacts. The optional `myhelp sync` commands
+need Git on `PATH`; nothing else requires it.
 
 ## [0.8.0] - 2026-09-24
 
@@ -181,7 +190,8 @@ advertised desktop installation channel.
 - Add the initial local-first Rust core, CLI, Tauri desktop scaffold, Nix
   development environment, and plaintext format contract.
 
-[Unreleased]: https://github.com/hjosugi/myhelp/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/hjosugi/myhelp/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/hjosugi/myhelp/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/hjosugi/myhelp/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/hjosugi/myhelp/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/hjosugi/myhelp/compare/v0.5.0...v0.6.0

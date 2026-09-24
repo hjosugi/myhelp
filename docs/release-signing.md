@@ -7,7 +7,7 @@ code signing, notarization, and a future Tauri updater. It complements the
 [release-channel ADR](adr/0003-release-channels-and-artifact-promotion.md) and
 the [desktop runtime threat model](security.md).
 
-No long-lived signing key is configured for v0.8.0. Its CLI archives use
+No long-lived signing key is configured for v0.9.0. Its CLI archives use
 checksums and keyless GitHub provenance. Its desktop bundles are visibly
 unsigned evaluation artifacts, not an advertised desktop channel.
 

@@ -10,6 +10,10 @@ MyHelp is still pre-1.0, so minor versions may change public behavior.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-24
+
+- Update reviewed frontend and Rust dependencies and include the verified GLib soundness backport.
+
 ## [0.9.0] - 2026-09-25
 
 ### Added
